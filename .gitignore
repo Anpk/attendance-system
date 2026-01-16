@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# IntelliJ / JetBrains
+.idea/
+*.iml
+out/
+
+# Gradle
+.gradle/
+build/
+
+# Spring Boot logs
+logs/
+
+# Node / Next.js
+node_modules/
+.next/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env files
+.env
+.env.*
