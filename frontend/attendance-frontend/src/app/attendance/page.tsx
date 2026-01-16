@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 type ApiError = {
   code: string;
@@ -10,11 +12,21 @@ type ApiError = {
 export default function AttendancePage() {
   const [message, setMessage] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!user) {
+      router.push('/login');
+    }
+  }, [user]);
 
   // 임시: 인증 붙기 전까지 고정 userId
   const userId = 1;
 
   async function callApi(url: string) {
+    if (!user) return;
+
     setLoading(true);
     setMessage('');
 
@@ -24,7 +36,7 @@ export default function AttendancePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId: user.userId }),
       });
 
       if (!res.ok) {
@@ -44,6 +56,8 @@ export default function AttendancePage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6">
       <h1 className="text-3xl font-bold">근태 관리</h1>
+
+      <p className="text-gray-600">로그인 사용자 ID: {user?.userId}</p>
 
       <div className="flex gap-4">
         <button
