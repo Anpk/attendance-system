@@ -2,6 +2,7 @@ package io.github.anpk.attendance.controller;
 
 import io.github.anpk.attendance.controller.dto.AttendanceCheckoutRequest;
 import io.github.anpk.attendance.controller.dto.AttendanceRequest;
+import io.github.anpk.attendance.exception.BusinessException;
 import io.github.anpk.attendance.model.Attendance;
 import io.github.anpk.attendance.repository.AttendanceRepository;
 import org.springframework.web.bind.annotation.*;
@@ -28,7 +29,7 @@ public class AttendanceController {
 
         attendanceRepository.findByUserIdAndWorkDate(request.userId, today)
                 .ifPresent(a -> {
-                    throw new IllegalStateException("이미 출근 처리되었습니다.");
+                    throw new BusinessException("ALREADY_CHECKED_IN", "이미 출근 처리되었습니다.");
                 });
 
         Attendance attendance = new Attendance(
@@ -54,11 +55,11 @@ public class AttendanceController {
         Attendance attendance = attendanceRepository
                 .findByUserIdAndWorkDate(request.userId, today)
                 .orElseThrow(() ->
-                        new IllegalStateException("출근 기록이 없어 퇴근할 수 없습니다.")
+                        new BusinessException("CHECK_IN_REQUIRED", "출근 기록이 없어 퇴근할 수 없습니다.")
                 );
 
         if (attendance.getCheckOutTime() != null) {
-            throw new IllegalStateException("이미 퇴근 처리되었습니다.");
+            throw new BusinessException("ALREADY_CHECKED_OUT", "이미 퇴근 처리되었습니다.");
         }
 
         attendance.checkOut(LocalDateTime.now());
