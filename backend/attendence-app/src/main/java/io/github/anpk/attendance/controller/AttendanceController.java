@@ -1,17 +1,23 @@
 package io.github.anpk.attendance.controller;
 
 import io.github.anpk.attendance.controller.dto.AttendanceCheckoutRequest;
-import io.github.anpk.attendance.controller.dto.AttendanceRequest;
 import io.github.anpk.attendance.controller.dto.TodayAttendanceResponse;
 import io.github.anpk.attendance.exception.BusinessException;
 import io.github.anpk.attendance.model.Attendance;
 import io.github.anpk.attendance.repository.AttendanceRepository;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
+@CrossOrigin(origins = "http://localhost:3000")
 @RestController
 @RequestMapping("/api/attendances")
 public class AttendanceController {
@@ -23,23 +29,46 @@ public class AttendanceController {
     }
 
     // 출근 기록 저장
-    @PostMapping
-    public Attendance checkIn(@RequestBody AttendanceRequest request) {
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public void checkIn(
+            @RequestParam Long userId,
+            @RequestParam MultipartFile photo
+    ) throws IOException {
+
+        if (photo.isEmpty()) {
+            throw new BusinessException("PHOTO_REQUIRED", "출근 사진은 필수입니다.");
+        }
 
         LocalDate today = LocalDate.now();
 
-        attendanceRepository.findByUserIdAndWorkDate(request.userId, today)
+        attendanceRepository.findByUserIdAndWorkDate(userId, today)
                 .ifPresent(a -> {
-                    throw new BusinessException("ALREADY_CHECKED_IN", "이미 출근 처리되었습니다.");
+                    throw new BusinessException(
+                            "ALREADY_CHECKED_IN",
+                            "이미 출근 처리되었습니다."
+                    );
                 });
 
-        Attendance attendance = new Attendance(
-                request.userId,
+        // 업로드 디렉토리 생성
+        String uploadDir = System.getProperty("user.dir") + "/uploads";
+        Files.createDirectories(Path.of(uploadDir));
+
+        // 파일명 충돌 방지
+        String filename = UUID.randomUUID() + "_" + photo.getOriginalFilename();
+        Path filePath = Path.of(uploadDir, filename);
+
+        // 파일 저장
+        photo.transferTo(filePath.toFile());
+
+        // 엔티티 생성 (정적 팩토리)
+        Attendance attendance = Attendance.checkIn(
+                userId,
                 today,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                filePath.toString()
         );
 
-        return attendanceRepository.save(attendance);
+        attendanceRepository.save(attendance);
     }
 
     // 날짜별 조회
