@@ -2,6 +2,7 @@ package io.github.anpk.attendance.controller;
 
 import io.github.anpk.attendance.controller.dto.AttendanceCheckoutRequest;
 import io.github.anpk.attendance.controller.dto.AttendanceRequest;
+import io.github.anpk.attendance.controller.dto.TodayAttendanceResponse;
 import io.github.anpk.attendance.exception.BusinessException;
 import io.github.anpk.attendance.model.Attendance;
 import io.github.anpk.attendance.repository.AttendanceRepository;
@@ -64,5 +65,24 @@ public class AttendanceController {
 
         attendance.checkOut(LocalDateTime.now());
         return attendanceRepository.save(attendance);
+    }
+
+    @GetMapping("/today")
+    public TodayAttendanceResponse getTodayAttendance(@RequestParam Long userId) {
+        var today = LocalDate.now();
+        var opt = attendanceRepository.findByUserIdAndWorkDate(userId, today);
+
+        if (opt.isEmpty()) {
+            return new TodayAttendanceResponse(false, false, null, null);
+        }
+
+        var a = opt.get();
+
+        return new TodayAttendanceResponse(
+                true,
+                a.getCheckOutTime() != null,
+                a.getCheckInTime() == null ? null : a.getCheckInTime().toString(),
+                a.getCheckOutTime() == null ? null : a.getCheckOutTime().toString()
+        );
     }
 }
