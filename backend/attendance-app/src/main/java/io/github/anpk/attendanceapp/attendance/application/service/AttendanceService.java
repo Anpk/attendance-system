@@ -2,6 +2,7 @@ package io.github.anpk.attendanceapp.attendance.application.service;
 
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
+import io.github.anpk.attendanceapp.error.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,7 +26,7 @@ public class AttendanceService {
 
         attendanceRepository.findByUserIdAndWorkDate(userId, today)
                 .ifPresent(a -> {
-                    throw new BusinessException("ALREADY_CHECKED_IN", "이미 출근 처리되었습니다.");
+                    throw new BusinessException(ErrorCode.ALREADY_CHECKED_IN, "이미 출근 처리되었습니다.");
                 });
 
         String uploadDir = "uploads";
