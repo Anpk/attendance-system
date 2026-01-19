@@ -1,4 +1,4 @@
-package io.github.anpk.attendance.controller;
+package io.github.anpk.attendanceapp.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;

@@ -1,4 +1,4 @@
-package io.github.anpk.attendance.controller;
+package io.github.anpk.attendanceapp.controller;
 
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;

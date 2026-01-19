@@ -1,4 +1,4 @@
-package io.github.anpk.attendance.api;
+package io.github.anpk.attendanceapp.api;
 
 import java.time.Instant;
 

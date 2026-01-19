@@ -1,4 +1,4 @@
-package io.github.anpk.attendance;
+package io.github.anpk.attendanceapp;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

@@ -1,10 +1,10 @@
-package io.github.anpk.attendance.controller;
+package io.github.anpk.attendanceapp.controller;
 
-import io.github.anpk.attendance.controller.dto.AttendanceCheckoutRequest;
-import io.github.anpk.attendance.controller.dto.TodayAttendanceResponse;
-import io.github.anpk.attendance.exception.BusinessException;
-import io.github.anpk.attendance.model.Attendance;
-import io.github.anpk.attendance.repository.AttendanceRepository;
+import io.github.anpk.attendanceapp.controller.dto.AttendanceCheckoutRequest;
+import io.github.anpk.attendanceapp.controller.dto.TodayAttendanceResponse;
+import io.github.anpk.attendanceapp.exception.BusinessException;
+import io.github.anpk.attendanceapp.model.Attendance;
+import io.github.anpk.attendanceapp.repository.AttendanceRepository;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,7 +19,7 @@ import java.util.UUID;
 
 @CrossOrigin(origins = "http://localhost:3000")
 @RestController
-@RequestMapping("/api/attendances")
+@RequestMapping("/api/attendance")
 public class AttendanceController {
 
     private final AttendanceRepository attendanceRepository;
