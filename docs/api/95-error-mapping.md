@@ -125,7 +125,7 @@ Handler는 모든 예외를 아래 표준 포맷으로 응답해야 한다.
   "error": "CONFLICT",
   "code": "ALREADY_CHECKED_IN",
   "message": "Attendance already checked in",
-  "path": "/api/attendances/check-in"
+  "path": "/api/attendance/check-in"
 }
 ```
 

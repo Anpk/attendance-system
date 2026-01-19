@@ -57,7 +57,7 @@
 
 ### Endpoint
 
-**POST** `/api/attendances/check-in`
+**POST** `/api/attendance/check-in`
 
 ---
 
@@ -125,7 +125,7 @@
 
 ### Endpoint
 
-**POST** `/api/attendances/check-out`
+**POST** `/api/attendance/check-out`
 
 ---
 
@@ -182,7 +182,7 @@
 
 ### Endpoint
 
-**GET** `/api/attendances/{attendanceId}`
+**GET** `/api/attendance/{attendanceId}`
 
 ---
 
@@ -222,7 +222,7 @@
 
 ### Endpoint
 
-**GET** `/api/attendances`
+**GET** `/api/attendance`
 
 ---
 

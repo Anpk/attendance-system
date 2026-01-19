@@ -53,7 +53,7 @@
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| API 경로 일치 | POST /api/attendances/check-in |  |  |
+| API 경로 일치 | POST /api/attendance/check-in |  |  |
 | 당일 1회 제한 | workDate 기준 |  |  |
 | 사진 업로드 필수 | 누락 시 오류 |  |  |
 | site_id 자동 설정 | employee.site_id 사용 |  |  |
@@ -63,7 +63,7 @@
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| API 경로 일치 | POST /api/attendances/check-out |  |  |
+| API 경로 일치 | POST /api/attendance/check-out |  |  |
 | 체크인 선행 필수 | NOT_CHECKED_IN |  |  |
 | 당일 1회 제한 | 중복 퇴근 금지 |  |  |
 | 미퇴근 상태 검증 | OPEN_ATTENDANCE_EXISTS |  |  |
