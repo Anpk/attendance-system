@@ -4,6 +4,7 @@ import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceResponse
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
 import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
+import io.github.anpk.attendanceapp.error.ErrorCode;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,16 +35,20 @@ public class AttendanceController {
             @RequestParam MultipartFile photo
     ) throws IOException {
 
+        /*
         if (photo.isEmpty()) {
-            throw new BusinessException("PHOTO_REQUIRED", "출근 사진은 필수입니다.");
+            // TODO(contract): validation 전용 error code 필요 (spec에 추가 후 ErrorCode로 반영)
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "출근 사진은 필수입니다.");
         }
+        */
+
 
         LocalDate today = LocalDate.now();
 
         attendanceRepository.findByUserIdAndWorkDate(userId, today)
                 .ifPresent(a -> {
                     throw new BusinessException(
-                            "ALREADY_CHECKED_IN",
+                            ErrorCode.ALREADY_CHECKED_IN,
                             "이미 출근 처리되었습니다."
                     );
                 });
@@ -76,6 +81,7 @@ public class AttendanceController {
         return attendanceRepository.findByWorkDate(LocalDate.parse(date));
     }
 
+    //미구현 로직
     /*
     @PostMapping("/check-out")
     public Attendance checkOut(@RequestBody AttendanceCheckoutRequest request) {
@@ -85,11 +91,12 @@ public class AttendanceController {
         Attendance attendance = attendanceRepository
                 .findByUserIdAndWorkDate(request.userId, today)
                 .orElseThrow(() ->
+                        // TODO(contract): NOT_CHECKED_IN 등 계약 code로 매핑할지 명확화 필요
                         new BusinessException("CHECK_IN_REQUIRED", "출근 기록이 없어 퇴근할 수 없습니다.")
                 );
 
         if (attendance.getCheckOutTime() != null) {
-            throw new BusinessException("ALREADY_CHECKED_OUT", "이미 퇴근 처리되었습니다.");
+            throw new BusinessException(ErrorCode.ALREADY_CHECKED_OUT,, "이미 퇴근 처리되었습니다.");
         }
 
         attendance.checkOut(LocalDateTime.now());
