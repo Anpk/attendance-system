@@ -1,0 +1,279 @@
+# Attendance API
+
+> ⚠️ **Reference Document (Non-authoritative)**
+>
+> This document is an **implementation reference** for the Attendance System.  
+> The **authoritative contract** is:
+>
+> 👉 `/docs/ATTENDANCE_SYSTEM_SPEC.md`
+>
+> In case of any conflict, ambiguity, or mismatch,  
+> **the contract document always prevails.**
+
+---
+
+## 📌 Scope & Purpose
+
+- 출근/퇴근(Attendance) 기록을 생성하고 조회하는 API를 정의한다.
+- 이 문서는 **엔드포인트, 요청/응답 형식, 필수 검증 규칙**만 다룬다.
+- 근태 데이터의 불변성, 정정 반영 규칙 등 **핵심 설계 판단은 Contract를 따른다.**
+
+---
+
+## 🔐 Authorization & Roles
+
+- Allowed Roles
+  - `EMPLOYEE`
+  - `MANAGER`
+  - `ADMIN`
+
+- Notes
+  - EMPLOYEE는 **본인 근태만** 생성/조회 가능
+  - MANAGER / ADMIN은 **권한 범위 내 조회만** 가능
+  - 모든 권한 검증은 **서버에서 강제**
+
+---
+
+## 🧱 Design Constraints (Fixed)
+
+- Attendance 데이터는 **직접 수정 불가**
+- 체크인/체크아웃은 **하루 기준 1회**
+- 시간 기준은 **Asia/Seoul**
+- 조회 시 반환되는 시간은 **Final 값**
+
+(Contract §Core Principles, §Attendance, §Final View 참조)
+
+---
+
+## 📎 Related Contract Sections
+
+- Contract §3 — Attendance (출퇴근)
+- Contract §5 — Final View Composition
+- Contract §6 — Attendance Read APIs
+
+---
+
+## 1. Check-in (출근)
+
+### Endpoint
+
+**POST** `/api/attendances/check-in`
+
+---
+
+### Description
+
+- 당일 최초 출근을 기록한다.
+- 사진 업로드는 필수이다.
+- 근무 Site는 **서버에서 자동 결정**된다.
+
+---
+
+### Request Body
+
+```json
+{
+  "photoKey": "string"
+}
+```
+
+| Field    | Type   | Required | Description                 |
+|----------|--------|----------|-----------------------------|
+| photoKey | string | O        | 업로드된 출근 사진 식별자 |
+
+> ⚠️ `siteId`, `employeeId`, `checkInAt` 은 **요청으로 받지 않는다.**
+
+---
+
+### Server-side Rules
+
+- 당일 1회만 허용
+- 미종료 Attendance가 있으면 거부
+- `attendance.site_id = employee.site_id`
+- `checkInAt = now(Asia/Seoul)`
+
+---
+
+### Success Response
+
+**201 Created**
+
+```json
+{
+  "attendanceId": 101,
+  "workDate": "2026-01-18",
+  "checkInAt": "2026-01-18T09:02:11+09:00",
+  "checkOutAt": null,
+  "isCorrected": false
+}
+```
+
+---
+
+### Error Codes
+
+| HTTP | Code                   | Description              |
+|------|------------------------|--------------------------|
+| 409  | ALREADY_CHECKED_IN     | 이미 출근 처리됨         |
+| 409  | OPEN_ATTENDANCE_EXISTS | 미종료 근태 존재         |
+| 422  | INVALID_PAYLOAD        | photoKey 누락/형식 오류 |
+| 403  | EMPLOYEE_INACTIVE      | 비활성 직원              |
+
+---
+
+## 2. Check-out (퇴근)
+
+### Endpoint
+
+**POST** `/api/attendances/check-out`
+
+---
+
+### Description
+
+- 당일 출근한 Attendance를 종료한다.
+- 체크인 이후 1회만 가능하다.
+
+---
+
+### Request Body
+
+```json
+{}
+```
+
+---
+
+### Server-side Rules
+
+- 체크인 없는 경우 거부
+- 이미 체크아웃된 경우 거부
+- `checkOutAt = now(Asia/Seoul)`
+
+---
+
+### Success Response
+
+**200 OK**
+
+```json
+{
+  "attendanceId": 101,
+  "workDate": "2026-01-18",
+  "checkInAt": "2026-01-18T09:02:11+09:00",
+  "checkOutAt": "2026-01-18T18:01:03+09:00",
+  "isCorrected": false
+}
+```
+
+---
+
+### Error Codes
+
+| HTTP | Code                | Description      |
+|------|---------------------|------------------|
+| 409  | NOT_CHECKED_IN      | 출근 기록 없음   |
+| 409  | ALREADY_CHECKED_OUT | 이미 퇴근 처리됨 |
+| 403  | EMPLOYEE_INACTIVE   | 비활성 직원      |
+
+---
+
+## 3. Attendance Read (단건 조회)
+
+### Endpoint
+
+**GET** `/api/attendances/{attendanceId}`
+
+---
+
+### Description
+
+- Attendance 단건을 조회한다.
+- 기본 반환 시간은 **Final 값**이다.
+
+---
+
+### Response
+
+```json
+{
+  "attendanceId": 101,
+  "employeeId": 5,
+  "siteId": 10,
+  "workDate": "2026-01-18",
+  "checkInAt": "2026-01-18T09:00:00+09:00",
+  "checkOutAt": "2026-01-18T18:00:00+09:00",
+  "isCorrected": true,
+  "appliedCorrectionRequestId": 55
+}
+```
+
+---
+
+### Notes
+
+- `checkInAt` / `checkOutAt` 은 **Final 값**
+- 승인된 정정이 없으면 원본 값 반환
+- 권한 범위 외 접근 시 403
+
+---
+
+## 4. Attendance Read (목록 조회)
+
+### Endpoint
+
+**GET** `/api/attendances`
+
+---
+
+### Query Parameters
+
+| Name       | Type   | Required | Description               |
+|------------|--------|----------|---------------------------|
+| month      | string | X        | YYYY-MM                   |
+| from       | string | X        | YYYY-MM-DD                |
+| to         | string | X        | YYYY-MM-DD                |
+| siteId     | number | X        | Site 필터                 |
+| employeeId | number | X        | 직원 필터 (ADMIN/MANAGER) |
+| page       | number | X        | 페이지                    |
+| size       | number | X        | 페이지 크기               |
+
+---
+
+### Description
+
+- 권한 스코프에 따라 자동 필터링된다.
+- 목록 조회에서도 **Final 값만 반환**한다.
+
+---
+
+### Response
+
+```json
+{
+  "items": [
+    {
+      "attendanceId": 101,
+      "workDate": "2026-01-18",
+      "checkInAt": "2026-01-18T09:00:00+09:00",
+      "checkOutAt": "2026-01-18T18:00:00+09:00",
+      "isCorrected": true
+    }
+  ],
+  "page": 1,
+  "size": 20,
+  "totalElements": 1
+}
+```
+
+---
+
+## 📌 Important Notes
+
+- Attendance API는 **근태 원본의 유일한 생성 경로**이다.
+- 시간/정책 계산, 정정 반영은 **조회 계층에서 합성**된다.
+- 이 문서는 **설계 변경 제안을 포함하지 않는다.**
+
+---
+
+> **Any change to attendance behavior must start from the Contract.**
