@@ -1,11 +1,11 @@
-package io.github.anpk.attendance.model;
+package io.github.anpk.attendanceapp.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "attendance",
+@Table(name = "attendanceapp",
         uniqueConstraints = {
                 @UniqueConstraint(columnNames = {"userId", "workDate"})
         })

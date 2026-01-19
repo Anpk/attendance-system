@@ -1,6 +1,6 @@
-package io.github.anpk.attendance.exception;
+package io.github.anpk.attendanceapp.exception;
 
-import io.github.anpk.attendance.api.ApiErrorResponse;
+import io.github.anpk.attendanceapp.api.ApiErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;

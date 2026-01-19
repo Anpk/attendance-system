@@ -1,4 +1,4 @@
-package io.github.anpk.attendance.controller.dto;
+package io.github.anpk.attendanceapp.controller.dto;
 
 public record TodayAttendanceResponse(
         boolean checkedIn,

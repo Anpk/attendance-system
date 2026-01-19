@@ -1,6 +1,6 @@
-package io.github.anpk.attendance.repository;
+package io.github.anpk.attendanceapp.repository;
 
-import io.github.anpk.attendance.model.Attendance;
+import io.github.anpk.attendanceapp.model.Attendance;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;

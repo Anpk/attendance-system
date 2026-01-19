@@ -1,4 +1,4 @@
-package io.github.anpk.attendance.exception;
+package io.github.anpk.attendanceapp.exception;
 
 public class BusinessException extends RuntimeException {
     private final String code;
