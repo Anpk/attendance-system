@@ -48,7 +48,7 @@
   "error": "CONFLICT",
   "code": "ALREADY_CHECKED_IN",
   "message": "Attendance already checked in",
-  "path": "/api/attendances/check-in"
+  "path": "/api/attendance/check-in"
 }
 ```
 

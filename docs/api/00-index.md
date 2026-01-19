@@ -21,6 +21,10 @@
 - 프론트엔드 / 백엔드 간 계약 보조 자료
 - Contract 문서를 **대체하지 않음**
 
+### API Path Naming Rule (Contract)
+- Attendance 도메인 API 경로는 단수형을 사용한다.
+  - `/api/attendance/...`
+
 ---
 
 ## 📂 API 문서 목록

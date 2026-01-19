@@ -52,6 +52,8 @@
 - Contract §5 — Final View Composition
 - Contract §9 — Error Handling
 
+Note: Attendance 도메인 API 경로는 Contract에 따라 단수형(`/api/attendance/...`)을 사용한다.
+
 ---
 
 ## 1. Correction Request Model

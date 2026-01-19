@@ -2,6 +2,17 @@
 
 ## ⚠️ Contract Declaration
 
+## 0-A. Naming Convention (Contract-Level)
+
+### API Path Naming (Fixed)
+
+- 도메인 모델 관점의 일반적인 명명 관행을 따른다.
+- Attendance 도메인 API 경로는 **단수형**을 사용한다.
+  - ✅ `/api/attendance/...`
+  - ❌ `/api/attendances/...`
+
+> 이 규칙은 Contract의 일부이며, 참조 문서(API docs)와 구현 코드는 반드시 이를 따른다.
+
 This document is the authoritative contract for the Attendance Management System.  
 All code, APIs, and database schemas **MUST comply** with this specification.  
 Any deviation requires **explicit prior approval**.
@@ -82,13 +93,13 @@ Any deviation requires **explicit prior approval**.
 ### 생성
 
 #### 체크인
-- `POST /api/attendances/check-in`
+- `POST /api/attendance/check-in`
 - 당일 1회
 - 사진 업로드 필수
 - `attendance.site_id = employee.site_id` 자동 설정
 
 #### 체크아웃
-- `POST /api/attendances/check-out`
+- `POST /api/attendance/check-out`
 - 체크인 이후 1회
 - 체크아웃 없이 재체크인 불가
 
@@ -155,8 +166,8 @@ Attendance 조회 시:
 
 ## 6. Attendance 조회 API
 
-- `GET /api/attendances/{attendanceId}`
-- `GET /api/attendances`
+- `GET /api/attendance/{attendanceId}`
+- `GET /api/attendance`
   - `month / from / to / siteId / employeeId`
 - 권한 스코프는 **서버에서 강제**
 - 기본 반환값은 **Final 값**
