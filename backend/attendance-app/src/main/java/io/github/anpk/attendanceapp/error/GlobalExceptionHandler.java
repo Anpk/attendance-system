@@ -4,8 +4,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -17,44 +19,73 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiErrorResponse> handleBusiness(BusinessException e, HttpServletRequest request) {
-        ErrorCode code = e.getErrorCode();
-        HttpStatus status = ErrorCodeHttpMapper.toStatus(code);
-
-        if (status == null) {
-            return buildInternalError(request, "서버 내부 오류가 발생했습니다.");
-        }
-
+        HttpStatus status = ErrorCodeHttpMapper.toStatus(e.getErrorCode());
         ApiErrorResponse body = new ApiErrorResponse(
                 OffsetDateTime.now(KST).toString(),
                 status.value(),
                 status.name(),
-                code.name(),
+                e.getErrorCode().name(),
                 e.getMessage(),
                 request.getRequestURI()
         );
         return ResponseEntity.status(status).body(body);
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException e, HttpServletRequest request) {
-        // validation 전용 code를 계약으로 확정하기 전까지는 임시 처리 필요.
-        // (가장 깔끔한 해법은 ErrorCode에 INVALID_REQUEST_PAYLOAD 등 추가 + 문서 반영)
-        HttpStatus status = HttpStatus.UNPROCESSABLE_ENTITY;
+    // 필수 파라미터 누락 (400)
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiErrorResponse> handleMissingParam(MissingServletRequestParameterException e, HttpServletRequest request) {
+            HttpStatus status = HttpStatus.BAD_REQUEST;
+            ApiErrorResponse body = new ApiErrorResponse(
+                    OffsetDateTime.now(KST).toString(),
+                    status.value(),
+                    status.name(),
+                    ErrorCode.MISSING_REQUIRED_PARAM.name(),
+                    "필수 파라미터가 누락되었습니다.",
+                    request.getRequestURI()
+            );
+            return ResponseEntity.status(status).body(body);
+    }
 
+    // 파라미터 타입/포맷 불일치 (400)
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e, HttpServletRequest request) {
+            HttpStatus status = HttpStatus.BAD_REQUEST;
+            ApiErrorResponse body = new ApiErrorResponse(
+                    OffsetDateTime.now(KST).toString(),
+                    status.value(),
+                    status.name(),
+                    ErrorCode.INVALID_REQUEST_PARAM.name(),
+                    "요청 파라미터 형식이 올바르지 않습니다.",
+                    request.getRequestURI()
+            );
+            return ResponseEntity.status(status).body(body);
+    }
+
+    // 유효성 검증 오류 (422) - @Valid 등을 붙였을 때
+    public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException e, HttpServletRequest request) {
+            HttpStatus status = HttpStatus.UNPROCESSABLE_ENTITY;
+            ApiErrorResponse body = new ApiErrorResponse(
+                            OffsetDateTime.now(KST).toString(),
+                            status.value(),
+                            status.name(),
+                            ErrorCode.INVALID_REQUEST_PAYLOAD.name(),
+                            "요청 값이 올바르지 않습니다.",
+                            request.getRequestURI()
+                            );
+            return ResponseEntity.status(status).body(body);
+            }
+
+    public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception e, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
         ApiErrorResponse body = new ApiErrorResponse(
                 OffsetDateTime.now(KST).toString(),
                 status.value(),
                 status.name(),
                 ErrorCode.INTERNAL_ERROR.name(),
-                "요청 값이 올바르지 않습니다.",
+                "서버 내부 오류가 발생했습니다.",
                 request.getRequestURI()
         );
         return ResponseEntity.status(status).body(body);
-    }
-
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception e, HttpServletRequest request) {
-        return buildInternalError(request, "서버 내부 오류가 발생했습니다.");
     }
 
     private ResponseEntity<ApiErrorResponse> buildInternalError(HttpServletRequest request, String message) {
