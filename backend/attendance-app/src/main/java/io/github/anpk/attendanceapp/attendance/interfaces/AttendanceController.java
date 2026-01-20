@@ -29,7 +29,7 @@ public class AttendanceController {
     }
 
     // 출근 기록 저장
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = "/check-in", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public void checkIn(
             @RequestParam Long userId,
             @RequestParam MultipartFile photo
