@@ -53,7 +53,7 @@
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| API 경로 일치 | POST /api/attendance/check-in | [FAIL] | 구현은 POST /api/attendance (root). 계약 경로(/check-in)로 정렬 필요 |
+| API 경로 일치 | POST /api/attendance/check-in | [PASS] | 컨트롤러 경로를 /check-in으로 정렬 |
 | 당일 1회 제한 | workDate 기준 |  |  |
 | 사진 업로드 필수 | 누락 시 오류 |  |  |
 | site_id 자동 설정 | employee.site_id 사용 |  |  |
