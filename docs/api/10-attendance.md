@@ -1,6 +1,8 @@
+#
 # Attendance API
 
 > ⚠️ **Reference Document (Non-authoritative)**
+
 >
 > This document is an **implementation reference** for the Attendance System.  
 > The **authoritative contract** is:
@@ -112,12 +114,12 @@
 
 ### Error Codes
 
-| HTTP | Code                   | Description              |
-|------|------------------------|--------------------------|
-| 409  | ALREADY_CHECKED_IN     | 이미 출근 처리됨         |
-| 409  | OPEN_ATTENDANCE_EXISTS | 미종료 근태 존재         |
-| 422  | INVALID_PAYLOAD        | photoKey 누락/형식 오류 |
-| 403  | EMPLOYEE_INACTIVE      | 비활성 직원              |
+| HTTP | Code                    | Description              |
+|------|-------------------------|--------------------------|
+| 409  | ALREADY_CHECKED_IN      | 이미 출근 처리됨         |
+| 409  | OPEN_ATTENDANCE_EXISTS  | 미종료 근태 존재         |
+| 422  | INVALID_REQUEST_PAYLOAD | photoKey 누락/형식 오류 |
+| 403  | EMPLOYEE_INACTIVE       | 비활성 직원              |
 
 ---
 

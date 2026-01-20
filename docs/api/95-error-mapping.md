@@ -41,6 +41,16 @@
 
 ## 1. Mapping Table (BusinessException.code → HTTP)
 
+### 1.0 Request Binding / Validation (Spring / Input)
+
+| code | HTTP | error | Example |
+|---|---:|---|---|
+| MISSING_REQUIRED_PARAM | 400 | BAD_REQUEST | 필수 파라미터 누락 (예: userId 누락) |
+| INVALID_REQUEST_PARAM | 400 | BAD_REQUEST | 파라미터 타입/포맷 오류 (예: userId=abc) |
+| INVALID_REQUEST_PAYLOAD | 422 | UNPROCESSABLE_ENTITY | @Valid 등 payload 검증 실패 |
+
+---
+
 ### 1.1 Authorization / Authentication
 
 | code | HTTP | error | Notes |
@@ -88,17 +98,17 @@
 ## 2. Non-Contract Codes (Current Implementation)
 
 현재 구현(예: `GlobalExceptionHandler`)에서 계약 밖 code가 생성될 수 있다.  
-이 경우 아래 원칙을 따른다.
+이 경우 아래 원칙을 따른다. (가능한 한 **계약 코드로 정렬**한다.)
 
-### 2.1 Validation Errors
+### 2.1 Deprecated Codes (Do Not Use)
 
-- Current: `VALIDATION_ERROR` (400)
-- Target:
-  - HTTP: **422**
-  - code: **`INVALID_REQUEST_PAYLOAD`** (권장)
-  - message: “요청 값이 올바르지 않습니다.” (로그/디버깅용)
-
-> `VALIDATION_ERROR`는 Contract 문서에 정의되지 않았으므로 신규 code로 유지하지 않는다.
+- `VALIDATION_ERROR`
+  - 과거/임시 구현에서 사용될 수 있으나, **Contract 문서에 정의되지 않은 비계약 코드**이다.
+  - 신규 구현/유지보수에서 **사용하지 않는다.**
+  - Validation/Binding 오류는 본 문서 1.0의 계약 코드로 매핑한다:
+    - `MISSING_REQUIRED_PARAM` (400)
+    - `INVALID_REQUEST_PARAM` (400)
+    - `INVALID_REQUEST_PAYLOAD` (422)
 
 ---
 
