@@ -3,7 +3,7 @@
 ## Audit Target
 
 - Spec: `/docs/ATTENDANCE_SYSTEM_SPEC.md` (v1)
-- Target Branch: develop
+- Target Branch: feature/attendance-structure
 - Target Commit: <to-be-filled>
 - Audit Date: <YYYY-MM-DD>
 
@@ -53,20 +53,20 @@
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| API 경로 일치 | POST /api/attendance/check-in | [PASS] | 컨트롤러 경로를 /check-in으로 정렬 |
-| 당일 1회 제한 | workDate 기준 |  |  |
-| 사진 업로드 필수 | 누락 시 오류 |  |  |
-| site_id 자동 설정 | employee.site_id 사용 |  |  |
+| API 경로 일치 | POST /api/attendance/check-in | [PASS] | 컨트롤러 매핑 정렬 완료 |
+| 당일 1회 제한 | workDate 기준 | [PASS] | userId+workDate 중복 체크 |
+| 사진 업로드 필수 | 누락 시 오류 | [TODO] | photo.isEmpty() 검증 미적용(추후 반영) |
+| site_id 자동 설정 | employee.site_id 사용 | [TODO] | Site/Employee 연계 도메인 미구현 |
 | 중복 출근 방지 | ALREADY_CHECKED_IN | [PASS] | ErrorCode enum 기반 BusinessException 사용 확인 |
 
 ### 3.2 Check-out
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| API 경로 일치 | POST /api/attendance/check-out | [PASS] | 미구현(주석 처리 상태) |
-| 체크인 선행 필수 | NOT_CHECKED_IN | [PASS]  |  |
-| 당일 1회 제한 | 중복 퇴근 금지 | [PASS]  |  |
-| 미퇴근 상태 검증 | OPEN_ATTENDANCE_EXISTS | [PASS]  | 이미 checkOutTime 존재 시 ALREADY_CHECKED_OUT 처리 |
+| API 경로 일치 | POST /api/attendance/check-out | [PASS] | 컨트롤러 매핑 정렬 완료 |
+| 체크인 선행 필수 | NOT_CHECKED_IN | [PASS] | 출근 없으면 BusinessException(ErrorCode) |
+| 당일 1회 제한 | 중복 퇴근 금지 | [PASS] | checkOutTime 존재 시 거부 |
+| 미퇴근 상태 검증 | OPEN_ATTENDANCE_EXISTS | [PASS] | 중복 퇴근 차단(Already checked out) |
 
 ---
 
@@ -145,7 +145,7 @@
 |-----|------|--------|------|
 | 90-errors.md 포맷 준수 | timestamp/status/error/code/message/path | [PASS] | ApiErrorResponse 6필드로 확장 완료 |
 | code 기준 분기 | message 미의존 | [PASS] | ErrorCode enum + ErrorCodeHttpMapper 기반으로 HTTP status 결정 |
-| 409/422 업무 오류 구분 | 매핑 정확 |  |  |
+| 409/422 업무 오류 구분 | 매핑 정확 | [PASS] | ErrorCodeHttpMapper로 status 결정 |
 | 미정의 code 처리 | INTERNAL_ERROR | [PASS] | 매핑 누락/미정의 시 GlobalExceptionHandler가 500 + INTERNAL_ERROR로 강제 |
 
 ---

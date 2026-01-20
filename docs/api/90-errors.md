@@ -89,6 +89,16 @@
 
 ## 4. Common Error Codes
 
+### Request Binding / Validation
+
+| Code | HTTP | Description |
+|------|------|-------------|
+| MISSING_REQUIRED_PARAM | 400 | 필수 쿼리/폼 파라미터 누락 (예: userId 누락)|
+| INVALID_REQUEST_PARAM | 400 | 파라미터 타입/포맷 오류(예: userId=abc) |
+| INVALID_REQUEST_PAYLOAD | 422 | 요청 payload 검증 실패(@Valid 등) |
+
+---
+
 ### Authorization / Authentication
 
 | Code | HTTP | Description |
