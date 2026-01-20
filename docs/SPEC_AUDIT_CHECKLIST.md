@@ -63,10 +63,10 @@
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| API 경로 일치 | POST /api/attendance/check-out | [TODO] | 미구현(주석 처리 상태) |
-| 체크인 선행 필수 | NOT_CHECKED_IN |  |  |
-| 당일 1회 제한 | 중복 퇴근 금지 |  |  |
-| 미퇴근 상태 검증 | OPEN_ATTENDANCE_EXISTS |  |  |
+| API 경로 일치 | POST /api/attendance/check-out | [PASS] | 미구현(주석 처리 상태) |
+| 체크인 선행 필수 | NOT_CHECKED_IN | [PASS]  |  |
+| 당일 1회 제한 | 중복 퇴근 금지 | [PASS]  |  |
+| 미퇴근 상태 검증 | OPEN_ATTENDANCE_EXISTS | [PASS]  | 이미 checkOutTime 존재 시 ALREADY_CHECKED_OUT 처리 |
 
 ---
 
