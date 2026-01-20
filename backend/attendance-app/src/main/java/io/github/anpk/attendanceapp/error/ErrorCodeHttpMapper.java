@@ -34,6 +34,11 @@ public final class ErrorCodeHttpMapper {
         MAP.put(ErrorCode.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
         MAP.put(ErrorCode.FORBIDDEN, HttpStatus.FORBIDDEN);
 
+        // Request Binding / Validation (Contract)
+        MAP.put(ErrorCode.MISSING_REQUIRED_PARAM, HttpStatus.BAD_REQUEST);
+        MAP.put(ErrorCode.INVALID_REQUEST_PARAM, HttpStatus.BAD_REQUEST);
+        MAP.put(ErrorCode.INVALID_REQUEST_PAYLOAD, HttpStatus.UNPROCESSABLE_ENTITY);
+
         // Internal
         MAP.put(ErrorCode.INTERNAL_ERROR, HttpStatus.INTERNAL_SERVER_ERROR);
     }

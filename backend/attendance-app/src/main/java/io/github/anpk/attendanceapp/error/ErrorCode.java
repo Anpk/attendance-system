@@ -5,6 +5,12 @@ package io.github.anpk.attendanceapp.error;
  * NOTE: Do not add codes without updating spec/docs and error-mapping.
  */
 public enum ErrorCode {
+
+    // Request Binding / Validation (Contract)
+    MISSING_REQUIRED_PARAM,
+    INVALID_REQUEST_PARAM,
+    INVALID_REQUEST_PAYLOAD,
+
     // Attendance
     ALREADY_CHECKED_IN,
     NOT_CHECKED_IN,
