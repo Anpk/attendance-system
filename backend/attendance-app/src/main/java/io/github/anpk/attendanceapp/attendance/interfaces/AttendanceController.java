@@ -81,28 +81,29 @@ public class AttendanceController {
         return attendanceRepository.findByWorkDate(LocalDate.parse(date));
     }
 
-    //미구현 로직
-    /*
-    @PostMapping("/check-out")
-    public Attendance checkOut(@RequestBody AttendanceCheckoutRequest request) {
+    @PostMapping(value = "/check-out")
+    public void checkOut(@RequestParam Long userId) {
+        var today = LocalDate.now();
 
-        LocalDate today = LocalDate.now();
-
-        Attendance attendance = attendanceRepository
-                .findByUserIdAndWorkDate(request.userId, today)
-                .orElseThrow(() ->
-                        // TODO(contract): NOT_CHECKED_IN 등 계약 code로 매핑할지 명확화 필요
-                        new BusinessException("CHECK_IN_REQUIRED", "출근 기록이 없어 퇴근할 수 없습니다.")
-                );
+        var attendance = attendanceRepository
+                .findByUserIdAndWorkDate(userId, today)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_CHECKED_IN,
+                        "출근 기록이 없어 퇴근할 수 없습니다."
+                ));
 
         if (attendance.getCheckOutTime() != null) {
-            throw new BusinessException(ErrorCode.ALREADY_CHECKED_OUT,, "이미 퇴근 처리되었습니다.");
+            throw new BusinessException(
+                    ErrorCode.ALREADY_CHECKED_OUT,
+                    "이미 퇴근 처리되었습니다."
+            );
         }
 
         attendance.checkOut(LocalDateTime.now());
-        return attendanceRepository.save(attendance);
+
+        attendanceRepository.save(attendance);
     }
-     */
+
 
     @GetMapping("/today")
     public AttendanceResponse getTodayAttendance(@RequestParam Long userId) {
