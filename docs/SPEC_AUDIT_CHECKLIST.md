@@ -53,17 +53,17 @@
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| API 경로 일치 | POST /api/attendance/check-in |  |  |
+| API 경로 일치 | POST /api/attendance/check-in | [FAIL] | 구현은 POST /api/attendance (root). 계약 경로(/check-in)로 정렬 필요 |
 | 당일 1회 제한 | workDate 기준 |  |  |
 | 사진 업로드 필수 | 누락 시 오류 |  |  |
 | site_id 자동 설정 | employee.site_id 사용 |  |  |
-| 중복 출근 방지 | ALREADY_CHECKED_IN |  |  |
+| 중복 출근 방지 | ALREADY_CHECKED_IN | [PASS] | ErrorCode enum 기반 BusinessException 사용 확인 |
 
 ### 3.2 Check-out
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| API 경로 일치 | POST /api/attendance/check-out |  |  |
+| API 경로 일치 | POST /api/attendance/check-out | [TODO] | 미구현(주석 처리 상태) |
 | 체크인 선행 필수 | NOT_CHECKED_IN |  |  |
 | 당일 1회 제한 | 중복 퇴근 금지 |  |  |
 | 미퇴근 상태 검증 | OPEN_ATTENDANCE_EXISTS |  |  |
@@ -143,10 +143,10 @@
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| 90-errors.md 포맷 준수 | status/error/code 포함 |  |  |
-| code 기준 분기 | message 미의존 |  |  |
+| 90-errors.md 포맷 준수 | timestamp/status/error/code/message/path | [PASS] | ApiErrorResponse 6필드로 확장 완료 |
+| code 기준 분기 | message 미의존 | [PASS] | ErrorCode enum + ErrorCodeHttpMapper 기반으로 HTTP status 결정 |
 | 409/422 업무 오류 구분 | 매핑 정확 |  |  |
-| 미정의 code 처리 | INTERNAL_ERROR |  |  |
+| 미정의 code 처리 | INTERNAL_ERROR | [PASS] | 매핑 누락/미정의 시 GlobalExceptionHandler가 500 + INTERNAL_ERROR로 강제 |
 
 ---
 
