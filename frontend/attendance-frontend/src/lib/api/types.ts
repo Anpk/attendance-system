@@ -28,3 +28,24 @@ export class ApiError extends Error {
     this.raw = params.raw;
   }
 }
+
+export type AttendanceActionResponse = {
+  attendanceId: number;
+  workDate: string; // "YYYY-MM-DD"
+  checkInAt: string | null; // ISO with +09:00
+  checkOutAt: string | null; // ISO with +09:00
+  isCorrected: boolean;
+};
+
+export type AttendanceStatus = {
+  id: number;
+  checkInTime: string;
+  checkOutTime: string | null;
+} | null;
+
+export type TodayAttendanceResponse = {
+  checkedIn: boolean;
+  checkedOut: boolean;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+};
