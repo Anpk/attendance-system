@@ -2,6 +2,7 @@ package io.github.anpk.attendanceapp.attendance.interfaces;
 
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceResponse;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceActionResponse;
+import io.github.anpk.attendanceapp.auth.CurrentUserId;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
 import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
@@ -35,7 +36,7 @@ public class AttendanceController {
     // 출근 기록 저장
     @PostMapping(value = "/check-in", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<AttendanceActionResponse> checkIn(
-            @RequestParam Long userId,
+            @CurrentUserId Long userId,
             @RequestParam MultipartFile photo
     ) throws IOException {
 
@@ -89,7 +90,7 @@ public class AttendanceController {
     }
 
     @PostMapping("/check-out")
-    public ResponseEntity<AttendanceActionResponse> checkOut(@RequestParam Long userId) {
+    public ResponseEntity<AttendanceActionResponse> checkOut(@CurrentUserId Long userId) {
         var today = LocalDate.now();
 
         var attendance = attendanceRepository
@@ -114,7 +115,7 @@ public class AttendanceController {
 
 
     @GetMapping("/today")
-    public AttendanceResponse getTodayAttendance(@RequestParam Long userId) {
+    public AttendanceResponse getTodayAttendance(@CurrentUserId Long userId) {
         var today = LocalDate.now();
         var opt = attendanceRepository.findByUserIdAndWorkDate(userId, today);
 
