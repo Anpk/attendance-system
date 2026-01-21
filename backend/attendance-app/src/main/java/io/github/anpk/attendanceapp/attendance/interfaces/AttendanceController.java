@@ -1,11 +1,15 @@
 package io.github.anpk.attendanceapp.attendance.interfaces;
 
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceResponse;
+import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceActionResponse;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
 import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
 import io.github.anpk.attendanceapp.error.ErrorCode;
+
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,7 +34,7 @@ public class AttendanceController {
 
     // 출근 기록 저장
     @PostMapping(value = "/check-in", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public void checkIn(
+    public ResponseEntity<AttendanceActionResponse> checkIn(
             @RequestParam Long userId,
             @RequestParam MultipartFile photo
     ) throws IOException {
@@ -53,6 +57,7 @@ public class AttendanceController {
                     );
                 });
 
+
         // 업로드 디렉토리 생성
         String uploadDir = System.getProperty("user.dir") + "/uploads";
         Files.createDirectories(Path.of(uploadDir));
@@ -64,6 +69,7 @@ public class AttendanceController {
         // 파일 저장
         photo.transferTo(filePath.toFile());
 
+
         // 엔티티 생성 (정적 팩토리)
         Attendance attendance = Attendance.checkIn(
                 userId,
@@ -72,7 +78,8 @@ public class AttendanceController {
                 filePath.toString()
         );
 
-        attendanceRepository.save(attendance);
+        var saved = attendanceRepository.save(attendance);
+        return ResponseEntity.status(HttpStatus.CREATED).body(AttendanceActionResponse.from(saved));
     }
 
     // 날짜별 조회
@@ -81,8 +88,8 @@ public class AttendanceController {
         return attendanceRepository.findByWorkDate(LocalDate.parse(date));
     }
 
-    @PostMapping(value = "/check-out")
-    public void checkOut(@RequestParam Long userId) {
+    @PostMapping("/check-out")
+    public ResponseEntity<AttendanceActionResponse> checkOut(@RequestParam Long userId) {
         var today = LocalDate.now();
 
         var attendance = attendanceRepository
@@ -101,7 +108,8 @@ public class AttendanceController {
 
         attendance.checkOut(LocalDateTime.now());
 
-        attendanceRepository.save(attendance);
+        var saved = attendanceRepository.save(attendance);
+        return ResponseEntity.ok(AttendanceActionResponse.from(saved));
     }
 
 
