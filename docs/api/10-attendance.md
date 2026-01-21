@@ -71,19 +71,25 @@
 
 ---
 
-### Request Body
+### Request (multipart/form-data)
 
-```json
-{
-  "photoKey": "string"
-}
+> Check-in은 **multipart/form-data**로 전송한다.
+
+#### Form Fields
+
+| Field  | Type | Required | Description |
+|--------|------|----------|-------------|
+| userId | number | O | 로그인 사용자 식별자 |
+| photo  | file   | O | 출근 사진 파일 |
+
+> ⚠️ `siteId`, `checkInAt` 등은 **요청으로 받지 않는다.**
+
+#### Example (curl)
+```bash
+curl -X POST "http://localhost:8080/api/attendance/check-in" \
+  -F "userId=1" \
+  -F "photo=@./example.png"
 ```
-
-| Field    | Type   | Required | Description                 |
-|----------|--------|----------|-----------------------------|
-| photoKey | string | O        | 업로드된 출근 사진 식별자 |
-
-> ⚠️ `siteId`, `employeeId`, `checkInAt` 은 **요청으로 받지 않는다.**
 
 ---
 
@@ -138,11 +144,18 @@
 
 ---
 
-### Request Body
+### Request (RequestParam)
 
-```json
-{}
-```
+> Check-out은 **RequestParam**으로 `userId`를 전달한다.
+
+#### Query Parameters
+
+| Name  | Type | Required | Description |
+|-------|------|----------|-------------|
+| userId | number | O | 로그인 사용자 식별자 |
+
+#### Example
+`POST /api/attendance/check-out?userId=1`
 
 ---
 
