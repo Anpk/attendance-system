@@ -90,7 +90,9 @@ export default function AttendancePage() {
         <button
           disabled={loading || isCheckedIn}
           className="rounded bg-blue-600 px-6 py-3 text-white disabled:opacity-50"
-          onClick={() => callApi('http://localhost:8080/api/attendance')}
+          onClick={() =>
+            callApi('http://localhost:8080/api/attendance/check-in')
+          }
         >
           출근
         </button>
