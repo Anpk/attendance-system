@@ -2,8 +2,8 @@
 
 ## Audit Target
 
-- Spec: `/docs/ATTENDANCE_SYSTEM_SPEC.md` (v1)
-- Target Branch: feature/attendance-structure
+- Spec: `/docs/ATTENDANCE_SYSTEM_SPEC.md` (v1.0.1)
+- Target Branch: main
 - Target Commit: <to-be-filled>
 - Audit Date: <YYYY-MM-DD>
 
@@ -33,6 +33,9 @@
 | Site 단위 근태 스코프 | Attendance에 site_id 존재 |  |  |
 | 권한 체계 고정 | EMPLOYEE / MANAGER / ADMIN |  |  |
 | ADMIN만 정책/조직 변경 가능 | 서버 단에서 강제 |  |  |
+| 모바일 환경 사용 가능 | 모바일 브라우저에서도 출근/퇴근 핵심 플로우 완료 | [TODO] | 모바일 UX 고정 전제(Contract) 반영. capture/미리보기 등 UX 세부는 프론트 구현으로 검증 |
+| 즉시 상태 반영 | 출근/퇴근 성공 응답 기반으로 UI 상태 즉시 갱신 | [PASS] | success DTO 기반 setToday 적용(프론트) |
+| 사용자 식별 방식 | 요청 파라미터(userId) 의존 제거, 서버 컨텍스트 기반 식별 | [PASS] | 임시 인증 컨텍스트: `X-USER-ID` 헤더 + `@CurrentUserId` ArgumentResolver. (추후 JWT/세션으로 교체 예정) |
 
 ---
 
@@ -56,8 +59,11 @@
 | API 경로 일치 | POST /api/attendance/check-in | [PASS] | 컨트롤러 매핑 정렬 완료 |
 | 당일 1회 제한 | workDate 기준 | [PASS] | userId+workDate 중복 체크 |
 | 사진 업로드 필수 | 누락 시 오류 | [TODO] | photo.isEmpty() 검증 미적용(추후 반영) |
+| 모바일 촬영 UX | 모바일에서 카메라 촬영/선택 흐름 제공 | [TODO] | `<input type="file" accept="image/*" capture>` 적용 및 동작 확인 |
 | site_id 자동 설정 | employee.site_id 사용 | [TODO] | Site/Employee 연계 도메인 미구현 |
 | 중복 출근 방지 | ALREADY_CHECKED_IN | [PASS] | ErrorCode enum 기반 BusinessException 사용 확인 |
+| 요청 형식 정합 | userId 미전달(인증 컨텍스트), photo multipart 업로드 | [PASS] | FormData에서 userId 제거, `X-USER-ID` 헤더로 사용자 식별 |
+
 
 ### 3.2 Check-out
 
@@ -67,6 +73,7 @@
 | 체크인 선행 필수 | NOT_CHECKED_IN | [PASS] | 출근 없으면 BusinessException(ErrorCode) |
 | 당일 1회 제한 | 중복 퇴근 금지 | [PASS] | checkOutTime 존재 시 거부 |
 | 미퇴근 상태 검증 | OPEN_ATTENDANCE_EXISTS | [PASS] | 중복 퇴근 차단(Already checked out) |
+| 요청 형식 정합 | userId 미전달(인증 컨텍스트) | [PASS] | `?userId=` 제거. `X-USER-ID` 헤더 + `@CurrentUserId`로 사용자 식별 (추후 JWT/세션으로 교체 예정) |
 
 ---
 
