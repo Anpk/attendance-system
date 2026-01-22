@@ -150,7 +150,7 @@
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| 90-errors.md 포맷 준수 | timestamp/status/error/code/message/path | [PASS] | ApiErrorResponse 6필드로 확장 완료 |
+| 90-errors.md 포맷 준수 | timestamp/status/error/code/message/path | [PASS] | ApiErrorResponse 6필드로 확장 완료 / Smoke(2026-01-22): POST /api/attendance/check-out without X-USER-ID → 401 UNAUTHORIZED (6 fields), with X-USER-ID → 409 NOT_CHECKED_IN (6 fields) |
 | code 기준 분기 | message 미의존 | [PASS] | ErrorCode enum + ErrorCodeHttpMapper 기반으로 HTTP status 결정 |
 | 409/422 업무 오류 구분 | 매핑 정확 | [PASS] | ErrorCodeHttpMapper로 status 결정 |
 | 미정의 code 처리 | INTERNAL_ERROR | [PASS] | 매핑 누락/미정의 시 GlobalExceptionHandler가 500 + INTERNAL_ERROR로 강제 |

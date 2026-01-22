@@ -55,7 +55,7 @@
 
 | code | HTTP | error | Notes |
 |---|---:|---|---|
-| UNAUTHORIZED | 401 | UNAUTHORIZED | (추후 인증 도입 시 사용) |
+| UNAUTHORIZED | 401 | UNAUTHORIZED | (현재 임시 인증 컨텍스트: X-USER-ID 헤더 누락/무효 시 사용. 추후 JWT/세션으로 교체 가능) |
 | FORBIDDEN | 403 | FORBIDDEN | (권한/스코프 위반 시 사용) |
 
 ---
