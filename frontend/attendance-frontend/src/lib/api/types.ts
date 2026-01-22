@@ -30,7 +30,7 @@ export class ApiError extends Error {
 }
 
 export type AttendanceActionResponse = {
-  attendanceId: number;
+  attendanceId: number | null;
   workDate: string; // "YYYY-MM-DD"
   checkInAt: string | null; // ISO with +09:00
   checkOutAt: string | null; // ISO with +09:00
@@ -42,10 +42,3 @@ export type AttendanceStatus = {
   checkInTime: string;
   checkOutTime: string | null;
 } | null;
-
-export type TodayAttendanceResponse = {
-  checkedIn: boolean;
-  checkedOut: boolean;
-  checkInTime: string | null;
-  checkOutTime: string | null;
-};

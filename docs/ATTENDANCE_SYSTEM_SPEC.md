@@ -21,7 +21,7 @@ Any deviation requires **explicit prior approval**.
 
 ## Metadata
 
-- Spec Version: 1.0
+- Spec Version: 1.0.1
 - Status: **Frozen (MVP)**
 - Created At: 2026-01-18
 - Source: ChatGPT design session (master)
@@ -57,6 +57,16 @@ Any deviation requires **explicit prior approval**.
 
 - `EMPLOYEE | MANAGER | ADMIN`
 - 정책 변경 및 조직 관리 권한은 **ADMIN만 가능**
+
+### UX (모바일 우선, 고정)
+
+- 본 시스템은 **모바일 환경(모바일 브라우저)에서도 사용 가능**해야 한다.
+- 출근/퇴근의 기본 플로우는 **복잡한 입력 없이 최소 상호작용으로 완료**되어야 한다.
+  - 예: 출근 화면에서 “출근” → 사진 촬영/선택 → 완료(상태 즉시 반영)
+  - 예: 출근 화면에서 “퇴근” → 완료(상태 즉시 반영)
+- 출근(check-in)은 **사진 촬영/선택 기반 업로드 UX**를 우선 지원한다.
+- 본 항목은 **UI/클라이언트 레이어의 고정 전제**이며,
+  API 경로/도메인 규칙/에러 계약 등 **핵심 계약을 변경하지 않는다.**
 
 ---
 
