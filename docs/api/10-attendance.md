@@ -34,6 +34,13 @@
   - MANAGER / ADMIN은 **권한 범위 내 조회만** 가능
   - 모든 권한 검증은 **서버에서 강제**
 
+> ✅ **User Identification (Implementation Note)**
+>
+> 본 문서의 생성/조회 API는 `userId`를 요청 파라미터/바디로 받지 않고,
+> **인증 컨텍스트**에서 현재 사용자를 식별한다.
+>
+> - (임시) `X-USER-ID: <number>` 헤더를 사용한다.
+
 ---
 
 ## 🧱 Design Constraints (Fixed)
@@ -79,7 +86,6 @@
 
 | Field  | Type | Required | Description |
 |--------|------|----------|-------------|
-| userId | number | O | 로그인 사용자 식별자 |
 | photo  | file   | O | 출근 사진 파일 |
 
 > ⚠️ `siteId`, `checkInAt` 등은 **요청으로 받지 않는다.**
@@ -87,7 +93,7 @@
 #### Example (curl)
 ```bash
 curl -X POST "http://localhost:8080/api/attendance/check-in" \
-  -F "userId=1" \
+  -H "X-USER-ID: 1" \
   -F "photo=@./example.png"
 ```
 
@@ -124,8 +130,9 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 |------|-------------------------|--------------------------|
 | 409  | ALREADY_CHECKED_IN      | 이미 출근 처리됨         |
 | 409  | OPEN_ATTENDANCE_EXISTS  | 미종료 근태 존재         |
-| 422  | INVALID_REQUEST_PAYLOAD | photoKey 누락/형식 오류 |
+| 422  | INVALID_REQUEST_PAYLOAD |  photo 누락/형식 오류  |
 | 403  | EMPLOYEE_INACTIVE       | 비활성 직원              |
+| 401  | UNAUTHORIZED            | 인증 필요/인증 정보 오류  |
 
 ---
 
@@ -144,18 +151,12 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 
 ---
 
-### Request (RequestParam)
+### Request (Auth Context)
 
-> Check-out은 **RequestParam**으로 `userId`를 전달한다.
-
-#### Query Parameters
-
-| Name  | Type | Required | Description |
-|-------|------|----------|-------------|
-| userId | number | O | 로그인 사용자 식별자 |
+> Check-out은 userId를 전달하지 않는다. (인증 컨텍스트에서 사용자 식별)
 
 #### Example
-`POST /api/attendance/check-out?userId=1`
+`POST /api/attendance/check-out + Header: X-USER-ID: 1`
 
 ---
 
@@ -190,6 +191,7 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 | 409  | NOT_CHECKED_IN      | 출근 기록 없음   |
 | 409  | ALREADY_CHECKED_OUT | 이미 퇴근 처리됨 |
 | 403  | EMPLOYEE_INACTIVE   | 비활성 직원      |
+| 401  | UNAUTHORIZED        | 인증 필요/인증 정보 오류 |
 
 ---
 

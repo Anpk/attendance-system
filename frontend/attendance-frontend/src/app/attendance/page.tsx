@@ -41,7 +41,10 @@ export default function AttendancePage() {
   async function fetchTodayAttendance(userId: number) {
     try {
       const data = await apiFetch<TodayAttendanceResponse>(
-        `http://localhost:8080/api/attendance/today?userId=${userId}`
+        `http://localhost:8080/api/attendance/today?userId=${userId}`,
+        {
+          headers: { 'X-USER-ID': String(user.userId) },
+        }
       );
       setToday(data);
     } catch (e) {
@@ -70,6 +73,7 @@ export default function AttendancePage() {
       const result = await apiFetch<AttendanceActionResponse>(url, {
         method: 'POST',
         body: { userId: user.userId },
+        headers: { 'X-USER-ID': String(user.userId) },
       });
 
       // 성공 DTO 기반 즉시 UI 반영
@@ -100,7 +104,6 @@ export default function AttendancePage() {
 
     try {
       const form = new FormData();
-      form.append('userId', String(user.userId));
       form.append('photo', photo);
 
       const result = await apiFetch<AttendanceActionResponse>(
@@ -108,6 +111,7 @@ export default function AttendancePage() {
         {
           method: 'POST',
           body: form, // apiFetch가 FormData를 그대로 전달(헤더 자동)
+          headers: { 'X-USER-ID': String(user.userId) },
         }
       );
 
@@ -159,7 +163,7 @@ export default function AttendancePage() {
     try {
       const result = await apiFetch<AttendanceActionResponse>(url, {
         method: 'POST',
-        // body 없음 (RequestParam 방식)
+        headers: { 'X-USER-ID': String(user.userId) },
       });
 
       setToday({
@@ -179,9 +183,7 @@ export default function AttendancePage() {
   }
 
   const handleCheckOut = () =>
-    checkOutWithRequestParam(
-      `${baseUrl}/api/attendance/check-out?userId=${user!.userId}`
-    );
+    checkOutWithRequestParam(`${baseUrl}/api/attendance/check-out`);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6">
