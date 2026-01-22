@@ -6,10 +6,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
-import type {
-  AttendanceActionResponse,
-  TodayAttendanceResponse,
-} from '@/lib/api/types';
+import type { AttendanceActionResponse } from '@/lib/api/types';
 
 export default function AttendancePage() {
   const { user } = useAuth();
@@ -18,11 +15,22 @@ export default function AttendancePage() {
   const [message, setMessage] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
-  const [today, setToday] = useState<TodayAttendanceResponse>({
-    checkedIn: false,
-    checkedOut: false,
-    checkInTime: null,
-    checkOutTime: null,
+  const todayStr = useMemo(() => {
+    // 로컬 기준 날짜를 "YYYY-MM-DD"로 생성
+    // toISOString() 사용 시 타임존(UTC) 영향으로 날짜가 하루 밀릴 수 있어 수동 생성
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
+  const [today, setToday] = useState<AttendanceActionResponse>({
+    attendanceId: null,
+    workDate: todayStr,
+    checkInAt: null,
+    checkOutAt: null,
+    isCorrected: false,
   });
 
   // 환경변수 기반 API Base URL
@@ -34,14 +42,15 @@ export default function AttendancePage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const isCheckedIn = today.checkedIn;
-  const isCheckedOut = today.checkedOut;
+  const isCheckedIn = today.checkInAt !== null;
+  const isCheckedOut = today.checkOutAt !== null;
 
   // 오늘 출근 상태 조회
-  async function fetchTodayAttendance(userId: number) {
+  async function fetchTodayAttendance() {
+    if (!user) return;
     try {
-      const data = await apiFetch<TodayAttendanceResponse>(
-        `http://localhost:8080/api/attendance/today?userId=${userId}`,
+      const data = await apiFetch<AttendanceActionResponse>(
+        `${baseUrl}/api/attendance/today`,
         {
           headers: { 'X-USER-ID': String(user.userId) },
         }
@@ -57,43 +66,12 @@ export default function AttendancePage() {
     // 로그인 전/로그아웃 상태면 로그인 페이지로 보냄
     if (!user) {
       router.push('/login');
+      return;
     }
 
     // 로그인 된 경우만 오늘 출근 상태 조회
-    fetchTodayAttendance(user.userId);
-  }, [user, router]);
-
-  async function callApi(url: string) {
-    if (!user || loading) return;
-
-    setLoading(true);
-    setMessage('');
-
-    try {
-      const result = await apiFetch<AttendanceActionResponse>(url, {
-        method: 'POST',
-        body: { userId: user.userId },
-        headers: { 'X-USER-ID': String(user.userId) },
-      });
-
-      // 성공 DTO 기반 즉시 UI 반영
-      setToday({
-        checkedIn: result.checkInAt !== null,
-        checkedOut: result.checkOutAt !== null,
-        checkInTime: result.checkInAt,
-        checkOutTime: result.checkOutAt,
-      });
-
-      setMessage('✅ 처리되었습니다.');
-
-      // 안정화 단계: 서버 최종값으로 재동기화(필요 시 추후 제거 가능)
-      await fetchTodayAttendance(user.userId);
-    } catch (e) {
-      setMessage(`❌ ${toUserMessage(e)}`);
-    } finally {
-      setLoading(false);
-    }
-  }
+    fetchTodayAttendance();
+  }, [user, router, baseUrl]);
 
   // 체크인: 사진 업로드(멀티파트)로 처리
   async function checkInWithPhoto(photo: File) {
@@ -115,15 +93,10 @@ export default function AttendancePage() {
         }
       );
 
-      setToday({
-        checkedIn: result.checkInAt !== null,
-        checkedOut: result.checkOutAt !== null,
-        checkInTime: result.checkInAt,
-        checkOutTime: result.checkOutAt,
-      });
+      // 성공 DTO 기반 즉시 UI 반영 (Today Snapshot 통일)
+      setToday(result);
 
       setMessage('✅ 처리되었습니다.');
-      await fetchTodayAttendance(user.userId);
     } catch (e) {
       setMessage(`❌ ${toUserMessage(e)}`);
     } finally {
@@ -166,15 +139,9 @@ export default function AttendancePage() {
         headers: { 'X-USER-ID': String(user.userId) },
       });
 
-      setToday({
-        checkedIn: result.checkInAt !== null,
-        checkedOut: result.checkOutAt !== null,
-        checkInTime: result.checkInAt,
-        checkOutTime: result.checkOutAt,
-      });
+      setToday(result);
 
       setMessage('✅ 처리되었습니다.');
-      await fetchTodayAttendance(user.userId);
     } catch (e) {
       setMessage(`❌ ${toUserMessage(e)}`);
     } finally {
@@ -196,6 +163,7 @@ export default function AttendancePage() {
         ref={fileInputRef}
         type="file"
         accept="image/*"
+        capture="environment"
         className="hidden"
         onChange={handlePhotoSelected}
       />

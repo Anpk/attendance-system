@@ -115,21 +115,12 @@ public class AttendanceController {
 
 
     @GetMapping("/today")
-    public AttendanceResponse getTodayAttendance(@CurrentUserId Long userId) {
+    public AttendanceActionResponse getTodayAttendance(@CurrentUserId Long userId) {
         var today = LocalDate.now();
         var opt = attendanceRepository.findByUserIdAndWorkDate(userId, today);
 
-        if (opt.isEmpty()) {
-            return new AttendanceResponse(false, false, null, null);
-        }
+        if (opt.isEmpty()) return AttendanceActionResponse.empty(today);
 
-        var a = opt.get();
-
-        return new AttendanceResponse(
-                true,
-                a.getCheckOutTime() != null,
-                a.getCheckInTime() == null ? null : a.getCheckInTime().toString(),
-                a.getCheckOutTime() == null ? null : a.getCheckOutTime().toString()
-        );
+        return AttendanceActionResponse.from(opt.get());
     }
 }
