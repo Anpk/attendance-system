@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -88,6 +90,41 @@ public class GlobalExceptionHandler {
             ErrorCode.INVALID_REQUEST_PARAM.name(),
             "요청 파라미터 형식이 올바르지 않습니다.",
             request.getRequestURI()
+        );
+        return ResponseEntity.status(status).body(body);
+    }
+
+    /**
+     * 업로드 크기 제한 초과 (컨트롤러 진입 전 발생 가능)
+     * Contract 관점: 요청 payload 오류 → INVALID_REQUEST_PAYLOAD(422) + 표준 6필드
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException e, HttpServletRequest request) {
+        HttpStatus status = ErrorCodeHttpMapper.toStatus(ErrorCode.INVALID_REQUEST_PAYLOAD);
+        ApiErrorResponse body = new ApiErrorResponse(
+                OffsetDateTime.now(KST).toString(),
+                status.value(),
+                status.name(),
+                ErrorCode.INVALID_REQUEST_PAYLOAD.name(),
+                "파일 크기가 너무 큽니다. (최대 5MB)",
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(status).body(body);
+    }
+
+    /**
+     * 멀티파트 파싱 단계에서의 일반 오류도 Contract 응답으로 정렬
+     */
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ApiErrorResponse> handleMultipart(MultipartException e, HttpServletRequest request) {
+        HttpStatus status = ErrorCodeHttpMapper.toStatus(ErrorCode.INVALID_REQUEST_PAYLOAD);
+        ApiErrorResponse body = new ApiErrorResponse(
+                OffsetDateTime.now(KST).toString(),
+                status.value(),
+                status.name(),
+                ErrorCode.INVALID_REQUEST_PAYLOAD.name(),
+                "요청 형식이 올바르지 않습니다.",
+                request.getRequestURI()
         );
         return ResponseEntity.status(status).body(body);
     }
