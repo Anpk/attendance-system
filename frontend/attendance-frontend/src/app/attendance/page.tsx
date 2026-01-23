@@ -15,6 +15,9 @@ export default function AttendancePage() {
   const [message, setMessage] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
+  // 서버 업로드 정책과 정합(최대 5MB)
+  const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
   const todayStr = useMemo(() => {
     // 로컬 기준 날짜를 "YYYY-MM-DD"로 생성
     // toISOString() 사용 시 타임존(UTC) 영향으로 날짜가 하루 밀릴 수 있어 수동 생성
@@ -44,6 +47,20 @@ export default function AttendancePage() {
 
   const isCheckedIn = today.checkInAt !== null;
   const isCheckedOut = today.checkOutAt !== null;
+
+  function toUploadUserMessage(e: unknown): string {
+    // apiFetch 에러 형태가 환경에 따라 다를 수 있어 방어적으로 처리
+    const anyErr = e as any;
+    const status = anyErr?.status ?? anyErr?.response?.status;
+    const code = anyErr?.code ?? anyErr?.response?.code ?? anyErr?.data?.code;
+
+    // 사용자 입력 오류(업로드 제약 위반)는 메시지를 UX 관점으로 표준화
+    if (status === 422 || code === 'INVALID_REQUEST_PAYLOAD') {
+      return '이미지 파일만 업로드할 수 있습니다. (최대 5MB)';
+    }
+
+    return toUserMessage(e);
+  }
 
   // 오늘 출근 상태 조회
   async function fetchTodayAttendance() {
@@ -98,7 +115,7 @@ export default function AttendancePage() {
 
       setMessage('✅ 처리되었습니다.');
     } catch (e) {
-      setMessage(`❌ ${toUserMessage(e)}`);
+      setMessage(`❌ ${toUploadUserMessage(e)}`);
     } finally {
       setLoading(false);
       // 같은 파일을 연속 선택해도 onChange가 동작하도록 초기화
@@ -117,9 +134,15 @@ export default function AttendancePage() {
     const file = e.target.files?.[0];
     if (!file) return; // 선택 취소
 
-    // (선택) 간단한 클라이언트 검증: 이미지 파일만 허용
+    // 간단한 클라이언트 검증: 이미지 + 최대 5MB
     if (!file.type.startsWith('image/')) {
       setMessage('❌ 이미지 파일만 업로드할 수 있습니다.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (file.size > MAX_PHOTO_BYTES) {
+      setMessage('❌ 이미지 파일만 업로드할 수 있습니다. (최대 5MB)');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -143,7 +166,7 @@ export default function AttendancePage() {
 
       setMessage('✅ 처리되었습니다.');
     } catch (e) {
-      setMessage(`❌ ${toUserMessage(e)}`);
+      setMessage(`❌ ${toUploadUserMessage(e)}`);
     } finally {
       setLoading(false);
     }
