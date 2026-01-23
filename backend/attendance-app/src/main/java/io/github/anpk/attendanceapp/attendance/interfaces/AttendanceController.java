@@ -1,11 +1,10 @@
 package io.github.anpk.attendanceapp.attendance.interfaces;
 
-import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceResponse;
+import io.github.anpk.attendanceapp.attendance.application.service.AttendanceService;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceActionResponse;
 import io.github.anpk.attendanceapp.auth.CurrentUserId;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
-import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
 import io.github.anpk.attendanceapp.error.ErrorCode;
 
 import org.springframework.http.MediaType;
@@ -20,6 +19,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @CrossOrigin(origins = "http://localhost:3000")
@@ -27,10 +27,10 @@ import java.util.UUID;
 @RequestMapping("/api/attendance")
 public class AttendanceController {
 
-    private final AttendanceRepository attendanceRepository;
+    private final AttendanceService attendanceService;
 
-    public AttendanceController(AttendanceRepository attendanceRepository) {
-        this.attendanceRepository = attendanceRepository;
+    public AttendanceController(AttendanceService attendanceService) {
+        this.attendanceService = attendanceService;
     }
 
     // 출근 기록 저장
@@ -39,88 +39,24 @@ public class AttendanceController {
             @CurrentUserId Long userId,
             @RequestParam MultipartFile photo
     ) throws IOException {
-
-        /*
-        if (photo.isEmpty()) {
-            // TODO(contract): validation 전용 error code 필요 (spec에 추가 후 ErrorCode로 반영)
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "출근 사진은 필수입니다.");
-        }
-        */
-
-
-        LocalDate today = LocalDate.now();
-
-        attendanceRepository.findByUserIdAndWorkDate(userId, today)
-                .ifPresent(a -> {
-                    throw new BusinessException(
-                            ErrorCode.ALREADY_CHECKED_IN,
-                            "이미 출근 처리되었습니다."
-                    );
-                });
-
-
-        // 업로드 디렉토리 생성
-        String uploadDir = System.getProperty("user.dir") + "/uploads";
-        Files.createDirectories(Path.of(uploadDir));
-
-        // 파일명 충돌 방지
-        String filename = UUID.randomUUID() + "_" + photo.getOriginalFilename();
-        Path filePath = Path.of(uploadDir, filename);
-
-        // 파일 저장
-        photo.transferTo(filePath.toFile());
-
-
-        // 엔티티 생성 (정적 팩토리)
-        Attendance attendance = Attendance.checkIn(
-                userId,
-                today,
-                LocalDateTime.now(),
-                filePath.toString()
-        );
-
-        var saved = attendanceRepository.save(attendance);
-        return ResponseEntity.status(HttpStatus.CREATED).body(AttendanceActionResponse.from(saved));
+        var res = attendanceService.checkIn(userId, photo);
+        return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
     // 날짜별 조회
     @GetMapping
     public List<Attendance> findByDate(@RequestParam String date) {
-        return attendanceRepository.findByWorkDate(LocalDate.parse(date));
+        return attendanceService.findByWorkDate(LocalDate.parse(date));
     }
 
     @PostMapping("/check-out")
     public ResponseEntity<AttendanceActionResponse> checkOut(@CurrentUserId Long userId) {
-        var today = LocalDate.now();
-
-        var attendance = attendanceRepository
-                .findByUserIdAndWorkDate(userId, today)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.NOT_CHECKED_IN,
-                        "출근 기록이 없어 퇴근할 수 없습니다."
-                ));
-
-        if (attendance.getCheckOutTime() != null) {
-            throw new BusinessException(
-                    ErrorCode.ALREADY_CHECKED_OUT,
-                    "이미 퇴근 처리되었습니다."
-            );
-        }
-
-        attendance.checkOut(LocalDateTime.now());
-
-        var saved = attendanceRepository.save(attendance);
-        return ResponseEntity.ok(AttendanceActionResponse.from(saved));
+        return ResponseEntity.ok(attendanceService.checkOut(userId));
     }
 
 
     @GetMapping("/today")
     public AttendanceActionResponse getTodayAttendance(@CurrentUserId Long userId) {
-        var today = LocalDate.now();
-        var opt = attendanceRepository.findByUserIdAndWorkDate(userId, today);
-
-        if (opt.isEmpty()) return AttendanceActionResponse.empty(today);
-
-        return AttendanceActionResponse.from(opt.get());
+        return attendanceService.getToday(userId);
     }
 }

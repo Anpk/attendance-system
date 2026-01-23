@@ -58,7 +58,7 @@
 |-----|------|--------|------|
 | API 경로 일치 | POST /api/attendance/check-in | [PASS] | 컨트롤러 매핑 정렬 완료 |
 | 당일 1회 제한 | workDate 기준 | [PASS] | userId+workDate 중복 체크 |
-| 사진 업로드 필수 | 누락 시 오류 | [TODO] | photo.isEmpty() 검증 미적용(추후 반영) |
+| 사진 업로드 필수 | 누락 시 오류 |  [PASS] | photo.isEmpty() 검증 적용(누락 시 INVALID_REQUEST_PAYLOAD/422) |
 | 모바일 촬영 UX | 모바일에서 카메라 촬영/선택 흐름 제공 | [TODO] | `<input type="file" accept="image/*" capture>` 적용 및 동작 확인 |
 | site_id 자동 설정 | employee.site_id 사용 | [TODO] | Site/Employee 연계 도메인 미구현 |
 | 중복 출근 방지 | ALREADY_CHECKED_IN | [PASS] | ErrorCode enum 기반 BusinessException 사용 확인 |

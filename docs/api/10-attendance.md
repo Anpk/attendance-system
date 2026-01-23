@@ -129,6 +129,7 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 | HTTP | Code                    | Description              |
 |------|-------------------------|--------------------------|
 | 409  | ALREADY_CHECKED_IN      | 이미 출근 처리됨         |
+| 409  | ALREADY_CHECKED_OUT     | 이미 퇴근 처리됨         |
 | 409  | OPEN_ATTENDANCE_EXISTS  | 미종료 근태 존재         |
 | 422  | INVALID_REQUEST_PAYLOAD |  photo 누락/형식 오류  |
 | 403  | EMPLOYEE_INACTIVE       | 비활성 직원              |
