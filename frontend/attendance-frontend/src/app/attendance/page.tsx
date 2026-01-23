@@ -45,6 +45,12 @@ export default function AttendancePage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // 중복 클릭/연타로 동일 요청이 2번 전송되는 것을 방지하기 위한 동기 가드
+  const inflightRef = useRef(false);
+
+  // 어떤 액션이 처리 중인지 버튼 라벨에 반영하기 위한 ref
+  const inflightActionRef = useRef<'checkin' | 'checkout' | null>(null);
+
   const isCheckedIn = today.checkInAt !== null;
   const isCheckedOut = today.checkOutAt !== null;
 
@@ -92,7 +98,9 @@ export default function AttendancePage() {
 
   // 체크인: 사진 업로드(멀티파트)로 처리
   async function checkInWithPhoto(photo: File) {
-    if (!user || loading) return;
+    if (!user || loading || inflightRef.current) return;
+    inflightRef.current = true;
+    inflightActionRef.current = 'checkin';
 
     setLoading(true);
     setMessage('');
@@ -117,6 +125,8 @@ export default function AttendancePage() {
     } catch (e) {
       setMessage(`❌ ${toUploadUserMessage(e)}`);
     } finally {
+      inflightActionRef.current = null;
+      inflightRef.current = false;
       setLoading(false);
       // 같은 파일을 연속 선택해도 onChange가 동작하도록 초기화
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -125,7 +135,7 @@ export default function AttendancePage() {
 
   // 출근 버튼: 파일 선택창 열기
   function handleCheckInClick() {
-    if (!user || loading || isCheckedIn) return;
+    if (!user || loading || inflightRef.current || isCheckedIn) return;
     fileInputRef.current?.click();
   }
 
@@ -151,7 +161,9 @@ export default function AttendancePage() {
   }
 
   async function checkOutWithRequestParam(url: string) {
-    if (!user || loading) return;
+    if (!user || loading || inflightRef.current) return;
+    inflightRef.current = true;
+    inflightActionRef.current = 'checkout';
 
     setLoading(true);
     setMessage('');
@@ -168,6 +180,8 @@ export default function AttendancePage() {
     } catch (e) {
       setMessage(`❌ ${toUploadUserMessage(e)}`);
     } finally {
+      inflightActionRef.current = null;
+      inflightRef.current = false;
       setLoading(false);
     }
   }
@@ -194,18 +208,24 @@ export default function AttendancePage() {
       <div className="flex gap-4">
         <button
           disabled={loading || isCheckedIn}
+          aria-busy={loading}
           className="rounded bg-blue-600 px-6 py-3 text-white disabled:opacity-50"
           onClick={handleCheckInClick}
         >
-          출근
+          {loading && inflightActionRef.current === 'checkin'
+            ? '처리 중...'
+            : '출근'}
         </button>
 
         <button
           disabled={loading || !isCheckedIn || isCheckedOut}
+          aria-busy={loading}
           className="rounded bg-green-600 px-6 py-3 text-white disabled:opacity-50"
           onClick={handleCheckOut}
         >
-          퇴근
+          {loading && inflightActionRef.current === 'checkout'
+            ? '처리 중...'
+            : '퇴근'}
         </button>
       </div>
 
