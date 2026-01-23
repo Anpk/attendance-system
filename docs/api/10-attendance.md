@@ -90,6 +90,8 @@
 
 > ⚠️ `siteId`, `checkInAt` 등은 **요청으로 받지 않는다.**
 
+> 업로드 제한(서버 검증): 이미지 파일만 허용(jpg/jpeg/png/webp/heic/heif), 최대 5MB
+
 #### Example (curl)
 ```bash
 curl -X POST "http://localhost:8080/api/attendance/check-in" \
@@ -131,7 +133,7 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 | 409  | ALREADY_CHECKED_IN      | 이미 출근 처리됨         |
 | 409  | ALREADY_CHECKED_OUT     | 이미 퇴근 처리됨         |
 | 409  | OPEN_ATTENDANCE_EXISTS  | 미종료 근태 존재         |
-| 422  | INVALID_REQUEST_PAYLOAD |  photo 누락/형식 오류  |
+| 422  | INVALID_REQUEST_PAYLOAD | photo 누락/형식 오류/용량 초과 |
 | 403  | EMPLOYEE_INACTIVE       | 비활성 직원              |
 | 401  | UNAUTHORIZED            | 인증 필요/인증 정보 오류  |
 
