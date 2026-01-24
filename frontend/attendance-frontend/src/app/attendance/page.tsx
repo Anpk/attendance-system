@@ -15,6 +15,9 @@ export default function AttendancePage() {
   const [message, setMessage] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
+  // 메시지 자동 해제(모바일 UX): 너무 오래 남지 않도록 TTL 적용
+  const MESSAGE_TTL_MS = 4000;
+
   // 서버 업로드 정책과 정합(최대 5MB)
   const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
@@ -51,6 +54,8 @@ export default function AttendancePage() {
   // 어떤 액션이 처리 중인지 버튼 라벨에 반영하기 위한 ref
   const inflightActionRef = useRef<'checkin' | 'checkout' | null>(null);
 
+  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const isCheckedIn = today.checkInAt !== null;
   const isCheckedOut = today.checkOutAt !== null;
 
@@ -65,6 +70,52 @@ export default function AttendancePage() {
       return '이미지 파일만 업로드할 수 있습니다. (최대 5MB)';
     }
 
+    return toUserMessage(e);
+  }
+
+  function setFlashMessage(next: string) {
+    // 새 메시지가 들어오면 기존 타이머는 항상 정리
+    if (messageTimerRef.current) {
+      clearTimeout(messageTimerRef.current);
+      messageTimerRef.current = null;
+    }
+
+    setMessage(next);
+
+    // 빈 메시지는 타이머 불필요
+    if (!next) return;
+
+    // TTL 후 자동 해제
+    messageTimerRef.current = setTimeout(() => {
+      setMessage('');
+      messageTimerRef.current = null;
+    }, MESSAGE_TTL_MS);
+  }
+
+  function toActionUserMessage(e: unknown): string {
+    // 업로드/액션 공통 에러 메시지 톤 통일
+    const anyErr = e as any;
+    const status = anyErr?.status ?? anyErr?.response?.status;
+    const code = anyErr?.code ?? anyErr?.response?.code ?? anyErr?.data?.code;
+    const serverMessage =
+      anyErr?.message ?? anyErr?.response?.message ?? anyErr?.data?.message;
+
+    // 422: 업로드/요청값 오류는 정책 문구로 표준화
+    if (status === 422 || code === 'INVALID_REQUEST_PAYLOAD') {
+      return '이미지 파일만 업로드할 수 있습니다. (최대 5MB)';
+    }
+
+    // 409: 비즈니스 충돌은 서버 메시지를 사용자 안내로 그대로 사용(톤만 통일)
+    if (status === 409) {
+      return serverMessage || '요청을 처리할 수 없습니다.';
+    }
+
+    // 401: 인증 누락
+    if (status === 401) {
+      return '인증이 필요합니다.';
+    }
+
+    // 그 외는 기존 매퍼 사용
     return toUserMessage(e);
   }
 
