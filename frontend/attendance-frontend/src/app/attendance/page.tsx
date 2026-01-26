@@ -43,8 +43,19 @@ export default function AttendancePage() {
   // - NEXT_PUBLIC_ 접두사: 브라우저에서 접근 가능
   // - 미설정 시 로컬 기본값 사용
   const baseUrl = useMemo(() => {
-    return process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+    return process.env.NEXT_PUBLIC_API_BASE_URL;
   }, []);
+
+  if (!baseUrl) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4">
+        <h1 className="text-2xl font-bold">근태 관리</h1>
+        <p className="text-red-600">
+          NEXT_PUBLIC_API_BASE_URL 환경변수가 설정되지 않았습니다.
+        </p>
+      </main>
+    );
+  }
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -172,9 +183,9 @@ export default function AttendancePage() {
       // 성공 DTO 기반 즉시 UI 반영 (Today Snapshot 통일)
       setToday(result);
 
-      setMessage('✅ 처리되었습니다.');
+      setFlashMessage('✅ 처리되었습니다.');
     } catch (e) {
-      setMessage(`❌ ${toUploadUserMessage(e)}`);
+      setFlashMessage(`❌ ${toUploadUserMessage(e)}`);
     } finally {
       inflightActionRef.current = null;
       inflightRef.current = false;
@@ -197,13 +208,13 @@ export default function AttendancePage() {
 
     // 간단한 클라이언트 검증: 이미지 + 최대 5MB
     if (!file.type.startsWith('image/')) {
-      setMessage('❌ 이미지 파일만 업로드할 수 있습니다.');
+      setFlashMessage('❌ 이미지 파일만 업로드할 수 있습니다.');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     if (file.size > MAX_PHOTO_BYTES) {
-      setMessage('❌ 이미지 파일만 업로드할 수 있습니다. (최대 5MB)');
+      setFlashMessage('❌ 이미지 파일만 업로드할 수 있습니다. (최대 5MB)');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -227,9 +238,9 @@ export default function AttendancePage() {
 
       setToday(result);
 
-      setMessage('✅ 처리되었습니다.');
+      setFlashMessage('✅ 처리되었습니다.');
     } catch (e) {
-      setMessage(`❌ ${toUploadUserMessage(e)}`);
+      setFlashMessage(`❌ ${toUploadUserMessage(e)}`);
     } finally {
       inflightActionRef.current = null;
       inflightRef.current = false;

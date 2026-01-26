@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.*;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
 
-@CrossOrigin(origins = "http://localhost:3000")
 @RestController
 @RequestMapping("/api/images")
 public class ImageController {
