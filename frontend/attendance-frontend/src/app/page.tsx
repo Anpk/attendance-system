@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 
 export default function Home() {
   const [message, setMessage] = useState('Loading...');
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+  if (!baseUrl) throw new Error('NEXT_PUBLIC_API_BASE_URL is not set');
 
   useEffect(() => {
-    fetch('http://localhost:8080/api/hello')
+    fetch(`${baseUrl}/api/hello`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
