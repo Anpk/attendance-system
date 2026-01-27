@@ -48,6 +48,7 @@
 | MISSING_REQUIRED_PARAM | 400 | BAD_REQUEST | 필수 파라미터 누락 (예: userId 누락) |
 | INVALID_REQUEST_PARAM | 400 | BAD_REQUEST | 파라미터 타입/포맷 오류 (예: userId=abc) |
 | INVALID_REQUEST_PAYLOAD | 422 | UNPROCESSABLE_ENTITY | @Valid 등 payload 검증 실패 |
+| ENDPOINT_NOT_FOUND | 404 | NOT_FOUND | 존재하지 않는 API 경로 호출 |
 
 ---
 

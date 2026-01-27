@@ -108,6 +108,14 @@
 
 ---
 
+### Framework / Endpoint
+
+| Code | HTTP | Description |
+|------|------|-------------|
+| ENDPOINT_NOT_FOUND | 404 | 존재하지 않는 API 경로 호출 |
+
+---
+
 ### Attendance Domain
 
 | Code | HTTP | Description |
