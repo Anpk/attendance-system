@@ -1,4 +1,7 @@
 app:
+  error:
+    include-exception-details: true
+
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
 
