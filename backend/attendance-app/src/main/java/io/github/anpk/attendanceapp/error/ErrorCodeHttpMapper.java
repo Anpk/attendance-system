@@ -39,6 +39,9 @@ public final class ErrorCodeHttpMapper {
         MAP.put(ErrorCode.INVALID_REQUEST_PARAM, HttpStatus.BAD_REQUEST);
         MAP.put(ErrorCode.INVALID_REQUEST_PAYLOAD, HttpStatus.UNPROCESSABLE_ENTITY);
 
+        // Framework / Endpoint
+        MAP.put(ErrorCode.ENDPOINT_NOT_FOUND, HttpStatus.NOT_FOUND);
+
         // Internal
         MAP.put(ErrorCode.INTERNAL_ERROR, HttpStatus.INTERNAL_SERVER_ERROR);
     }

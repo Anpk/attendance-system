@@ -1,70 +1,74 @@
-# Attendance System Documentation
+```md
+# Attendance Frontend (Next.js)
 
-이 디렉토리는 **근태관리 웹앱 프로젝트의 공식 문서 저장소**입니다.  
-모든 설계, API 명세, 운영 규칙은 이 디렉토리를 기준으로 관리됩니다.
-
----
-
-## 🔐 Contract (Authoritative Specification)
-
-> ⚠️ 이 문서는 프로젝트의 최상위 설계 계약(Contract)입니다.  
-> 코드, API, DB 스키마는 반드시 이 문서를 준수해야 합니다.
-
-- **ATTENDANCE_SYSTEM_SPEC.md**  
-  → 세션 이월용 마스터 문서 (Frozen / MVP 기준)
+이 디렉토리는 **근태관리 웹앱 프로젝트의 프론트엔드(Next.js)** 입니다.  
+모바일 환경에서도 사용 가능한 간단한 UX를 목표로 하며, 백엔드 API와의 계약을 준수합니다.
 
 ---
 
-## 📘 API Reference (Implementation Guide)
+## Contract (Authoritative Specification)
 
-> API 상세 명세 문서입니다.  
-> **계약의 기준은 항상 `ATTENDANCE_SYSTEM_SPEC.md`이며**,  
-> 아래 문서들은 이를 구체화한 참조 문서(reference)입니다.
+> **주의**: 프론트엔드는 서버 계약(Contract)을 기준으로 동작해야 합니다.  
+> UI/에러 처리/상태 갱신은 Spec 및 API 문서와 정합을 유지합니다.
 
-- **api/00-index.md**  
-  → API 전체 목차
+- `docs/ATTENDANCE_SYSTEM_SPEC.md`  
+  - 최상위 계약(SSOT)
 
-- **api/10-attendance.md**  
-  → 출퇴근(체크인/체크아웃), 근태 조회
-
-- **api/20-correction-requests.md**  
-  → 정정 요청 생성 / 목록 / 승인 / 반려 / 취소
-
-- **api/30-admin-ops.md**  
-  → 관리자 운영 관리 (Site / Employee / Manager / Mapping)
-
-- **api/40-policy.md**  
-  → Site별 근태 정책 관리
-
-- **api/90-errors.md**  
-  → 공통 에러 포맷 및 에러 코드 표준
+- `docs/api/*`  
+  - 구현 가이드(요청/응답/에러 포맷)
 
 ---
 
-## 🔍 Audit (Spec Compliance)
+## Environment Variables (필수)
 
-> 현재 구현 코드가 Spec을 얼마나 충족하는지 기록하는 감사 문서입니다.
+이 프로젝트는 API 서버 주소를 **환경변수로 주입**받습니다.  
+로컬 실행 전 아래 파일을 생성하세요.
 
-- **audit/SPEC_AUDIT_CHECKLIST.md**  
-  → Spec 준수 여부(PASS / FAIL / TODO) 점검표
+### `.env.local` (frontend/attendance-frontend/.env.local)
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+```
+
+로컬에서는 백엔드(Spring Boot) 서버도 함께 실행되어 있어야 합니다. (기본: 8080)
+
+> `NEXT_PUBLIC_API_BASE_URL`이 설정되지 않으면 Attendance 페이지에서 안내 메시지가 표시되며 API 호출이 진행되지 않습니다.
 
 ---
 
-## 🧭 Backlog / Migration
+## Getting Started
 
-> Spec은 맞지만, **지금 당장 적용하지 않는 변경 사항**을 기록합니다.
+개발 서버 실행:
 
-- **backlog/TODO_MIGRATION.md**  
-  → DB 변경, 대규모 리팩토링, 구조적 이슈 정리
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+```
+
+브라우저에서 접속:
+
+- `http://localhost:3000`
 
 ---
 
-## 📌 운영 원칙 요약
+## 개발/운영 원칙 요약
 
-- `ATTENDANCE_SYSTEM_SPEC.md` 는 **단일 진실 소스(SSOT)** 이다.
-- API 문서는 Spec을 **재서술하지 않는다**.
-- Audit 문서는 **현실 상태를 숨김없이 기록**한다.
-- Backlog 문서는 **의도적 미적용의 증거**다.
+- API Base URL은 **`NEXT_PUBLIC_API_BASE_URL` 단일 기준**으로 관리한다.
+- 성공 응답 DTO 기반으로 **UI 상태를 즉시 갱신**한다(출근/퇴근 직후 today 상태 반영).
+- 오류는 서버 표준 에러 포맷(6필드) 및 코드 체계를 기준으로 **사용자 안내 문구를 일관되게 처리**한다.
+- 모바일 UX를 우선 고려한다(중복 클릭 방지, 처리 중 상태 표시 등).
+
+## Backend (Spring Boot) - CORS 설정
+
+백엔드의 CORS 허용 Origin은 환경변수로 제어합니다.
+
+```bash
+# 미설정 시 기본값: http://localhost:3000
+export CORS_ALLOWED_ORIGINS=http://localhost:3000
+```
 
 ---
 

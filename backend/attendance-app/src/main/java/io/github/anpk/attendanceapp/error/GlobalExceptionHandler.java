@@ -1,6 +1,9 @@
 package io.github.anpk.attendanceapp.error;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -20,6 +23,11 @@ import java.time.ZoneId;
 public class GlobalExceptionHandler {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    // dev 프로필에서만 예외 요약을 message에 포함(표준 6필드 유지)
+    @Value("${app.error.include-exception-details:false}")
+    private boolean includeExceptionDetails;
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiErrorResponse> handleBusiness(BusinessException e, HttpServletRequest request) {
@@ -69,27 +77,26 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleMissingParam(MissingServletRequestParameterException e, HttpServletRequest request) {
         HttpStatus status = HttpStatus.BAD_REQUEST;
         ApiErrorResponse body = new ApiErrorResponse(
-            OffsetDateTime.now(KST).toString(),
-            status.value(),
-            status.name(),
-            ErrorCode.MISSING_REQUIRED_PARAM.name(),
-            "필수 파라미터가 누락되었습니다.",
-            request.getRequestURI()
+                OffsetDateTime.now(KST).toString(),
+                status.value(),
+                status.name(),
+                ErrorCode.MISSING_REQUIRED_PARAM.name(),
+                "필수 파라미터가 누락되었습니다.",
+                request.getRequestURI()
         );
         return ResponseEntity.status(status).body(body);
     }
 
     // 파라미터 타입/포맷 불일치 (400)
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ApiErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e, HttpServletRequest request) {
-        HttpStatus status = HttpStatus.BAD_REQUEST;
+    public ResponseEntity<ApiErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e, HttpServletRequest request) {        HttpStatus status = HttpStatus.BAD_REQUEST;
         ApiErrorResponse body = new ApiErrorResponse(
-            OffsetDateTime.now(KST).toString(),
-            status.value(),
-            status.name(),
-            ErrorCode.INVALID_REQUEST_PARAM.name(),
-            "요청 파라미터 형식이 올바르지 않습니다.",
-            request.getRequestURI()
+                OffsetDateTime.now(KST).toString(),
+                status.value(),
+                status.name(),
+                ErrorCode.INVALID_REQUEST_PARAM.name(),
+                "요청 파라미터 형식이 올바르지 않습니다.",
+                request.getRequestURI()
         );
         return ResponseEntity.status(status).body(body);
     }
@@ -134,41 +141,36 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleValidation(MethodArgumentNotValidException e, HttpServletRequest request) {
         HttpStatus status = HttpStatus.UNPROCESSABLE_ENTITY;
         ApiErrorResponse body = new ApiErrorResponse(
-            OffsetDateTime.now(KST).toString(),
-            status.value(),
-            status.name(),
-            ErrorCode.INVALID_REQUEST_PAYLOAD.name(),
-            "요청 값이 올바르지 않습니다.",
-            request.getRequestURI()
+                OffsetDateTime.now(KST).toString(),
+                status.value(),
+                status.name(),
+                ErrorCode.INVALID_REQUEST_PAYLOAD.name(),
+                "요청 값이 올바르지 않습니다.",
+                request.getRequestURI()
         );
         return ResponseEntity.status(status).body(body);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception e, HttpServletRequest request) {
-        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
-        ApiErrorResponse body = new ApiErrorResponse(
-            OffsetDateTime.now(KST).toString(),
-            status.value(),
-            status.name(),
-            ErrorCode.INTERNAL_ERROR.name(),
-            "서버 내부 오류가 발생했습니다.",
-            request.getRequestURI()
-        );
-        return ResponseEntity.status(status).body(body);
-    }
+        // 응답에는 trace를 절대 포함하지 않고, 로그에만 남긴다.
+        log.error("Unhandled exception", e);
 
-
-    private ResponseEntity<ApiErrorResponse> buildInternalError(HttpServletRequest request, String message) {
         HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+        String message = "서버 내부 오류가 발생했습니다.";
+        if (includeExceptionDetails) {
+            // dev에서만 예외 요약을 message에 포함(표준 6필드 유지)
+            String detail = e.getMessage() == null ? "" : e.getMessage();
+            message = e.getClass().getSimpleName() + (detail.isBlank() ? "" : (": " + detail));
+        }
 
         ApiErrorResponse body = new ApiErrorResponse(
-            OffsetDateTime.now(KST).toString(),
-            status.value(),
-            status.name(),
-            ErrorCode.INTERNAL_ERROR.name(),
-            message,
-            request.getRequestURI()
+                OffsetDateTime.now(KST).toString(),
+                status.value(),
+                status.name(),
+                ErrorCode.INTERNAL_ERROR.name(),
+                message,
+                request.getRequestURI()
         );
         return ResponseEntity.status(status).body(body);
     }

@@ -5,6 +5,7 @@ package io.github.anpk.attendanceapp.error;
  * NOTE: Do not add codes without updating spec/docs and error-mapping.
  */
 public enum ErrorCode {
+    ENDPOINT_NOT_FOUND,
 
     // Request Binding / Validation (Contract)
     MISSING_REQUIRED_PARAM,
