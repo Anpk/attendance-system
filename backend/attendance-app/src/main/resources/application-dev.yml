@@ -7,9 +7,6 @@ app:
 
 server:
   port: 8080
-# 방어적 설정(예외 처리 누락 시에도 stacktrace 응답 방지)   
-  error:
-    include-stacktrace: never
 
 spring:
 
