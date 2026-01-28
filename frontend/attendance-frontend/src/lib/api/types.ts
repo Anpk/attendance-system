@@ -42,3 +42,19 @@ export type AttendanceStatus = {
   checkInTime: string;
   checkOutTime: string | null;
 } | null;
+
+// 월별 근태 목록(이력) 조회 응답
+export type AttendanceListItemResponse = {
+  attendanceId: number;
+  workDate: string; // "YYYY-MM-DD"
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  isCorrected: boolean;
+};
+
+export type AttendanceListResponse = {
+  items: AttendanceListItemResponse[];
+  page: number;
+  size: number;
+  totalElements: number;
+};

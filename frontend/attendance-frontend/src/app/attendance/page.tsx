@@ -46,17 +46,6 @@ export default function AttendancePage() {
     return process.env.NEXT_PUBLIC_API_BASE_URL;
   }, []);
 
-  if (!baseUrl) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-4">
-        <h1 className="text-2xl font-bold">근태 관리</h1>
-        <p className="text-red-600">
-          NEXT_PUBLIC_API_BASE_URL 환경변수가 설정되지 않았습니다.
-        </p>
-      </main>
-    );
-  }
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // 중복 클릭/연타로 동일 요청이 2번 전송되는 것을 방지하기 위한 동기 가드
@@ -250,6 +239,17 @@ export default function AttendancePage() {
 
   const handleCheckOut = () =>
     checkOutWithRequestParam(`${baseUrl}/api/attendance/check-out`);
+
+  if (!baseUrl) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4">
+        <h1 className="text-2xl font-bold">근태 관리</h1>
+        <p className="text-red-600">
+          NEXT_PUBLIC_API_BASE_URL 환경변수가 설정되지 않았습니다.
+        </p>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6">
