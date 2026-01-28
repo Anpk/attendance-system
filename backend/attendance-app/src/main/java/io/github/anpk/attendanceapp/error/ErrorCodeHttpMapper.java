@@ -11,6 +11,7 @@ public final class ErrorCodeHttpMapper {
 
     static {
         // Attendance
+        MAP.put(ErrorCode.ATTENDANCE_NOT_FOUND, HttpStatus.NOT_FOUND);
         MAP.put(ErrorCode.ALREADY_CHECKED_IN, HttpStatus.CONFLICT);
         MAP.put(ErrorCode.NOT_CHECKED_IN, HttpStatus.CONFLICT);
         MAP.put(ErrorCode.ALREADY_CHECKED_OUT, HttpStatus.CONFLICT);

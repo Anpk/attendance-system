@@ -1,7 +1,10 @@
 package io.github.anpk.attendanceapp.attendance.interfaces;
 
+import io.github.anpk.attendanceapp.attendance.application.service.AttendanceQueryService;
 import io.github.anpk.attendanceapp.attendance.application.service.AttendanceService;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceActionResponse;
+import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceListResponse;
+import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceReadResponse;
 import io.github.anpk.attendanceapp.auth.CurrentUserId;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
@@ -27,9 +30,14 @@ import java.util.UUID;
 public class AttendanceController {
 
     private final AttendanceService attendanceService;
+    private final AttendanceQueryService attendanceQueryService;
 
-    public AttendanceController(AttendanceService attendanceService) {
+    public AttendanceController(
+            AttendanceService attendanceService,
+            AttendanceQueryService attendanceQueryService
+    ) {
         this.attendanceService = attendanceService;
+        this.attendanceQueryService = attendanceQueryService;
     }
 
     // 출근 기록 저장
@@ -42,12 +50,6 @@ public class AttendanceController {
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
-    // 날짜별 조회
-    @GetMapping
-    public List<Attendance> findByDate(@RequestParam String date) {
-        return attendanceService.findByWorkDate(LocalDate.parse(date));
-    }
-
     @PostMapping("/check-out")
     public ResponseEntity<AttendanceActionResponse> checkOut(@CurrentUserId Long userId) {
         return ResponseEntity.ok(attendanceService.checkOut(userId));
@@ -57,5 +59,31 @@ public class AttendanceController {
     @GetMapping("/today")
     public AttendanceActionResponse getTodayAttendance(@CurrentUserId Long userId) {
         return attendanceService.getToday(userId);
+    }
+
+    /**
+     * Attendance 목록 조회 (월 단위)
+     * - 현재 MVP 1차: month(YYYY-MM)만 우선 지원
+     */
+    @GetMapping
+    public AttendanceListResponse list(
+            @CurrentUserId Long userId,
+            @RequestParam String month,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size
+    ) {
+        return attendanceQueryService.listByMonth(userId, month, page, size);
+    }
+
+    /**
+     * Attendance 단건 조회
+     * - /today 와 충돌 방지를 위해 숫자 패턴만 매칭
+     */
+    @GetMapping("/{attendanceId:\\d+}")
+    public AttendanceReadResponse read(
+            @CurrentUserId Long userId,
+            @PathVariable Long attendanceId
+    ) {
+        return attendanceQueryService.read(attendanceId, userId);
     }
 }

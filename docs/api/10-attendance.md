@@ -264,6 +264,7 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 
 - 권한 스코프에 따라 자동 필터링된다.
 - 목록 조회에서도 **Final 값만 반환**한다.
+- (MVP 1차) 현재는 `month(YYYY-MM)`만 우선 지원한다. (`from/to/siteId/employeeId`는 차기 버전에서 활성화)
 
 ---
 

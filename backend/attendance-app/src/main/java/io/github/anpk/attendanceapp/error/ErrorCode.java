@@ -13,6 +13,7 @@ public enum ErrorCode {
     INVALID_REQUEST_PAYLOAD,
 
     // Attendance
+    ATTENDANCE_NOT_FOUND,
     ALREADY_CHECKED_IN,
     NOT_CHECKED_IN,
     ALREADY_CHECKED_OUT,
