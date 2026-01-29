@@ -125,6 +125,7 @@
 | ALREADY_CHECKED_OUT | 409 | 이미 퇴근 |
 | OPEN_ATTENDANCE_EXISTS | 409 | 미종료 근태 |
 | EMPLOYEE_INACTIVE | 403 | 비활성 직원 |
+| ATTENDANCE_NOT_FOUND | 404 | 근태 없음 |
 
 ---
 
