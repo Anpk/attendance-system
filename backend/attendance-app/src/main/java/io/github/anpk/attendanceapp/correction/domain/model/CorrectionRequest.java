@@ -1,0 +1,78 @@
+package io.github.anpk.attendanceapp.correction.domain.model;
+
+import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
+import jakarta.persistence.*;
+
+import java.time.OffsetDateTime;
+
+/**
+ * 정정 요청 엔티티 (MVP 1차: 생성/내 요청 목록까지만 사용)
+ */
+@Entity
+@Table(name = "correction_requests")
+public class CorrectionRequest {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "attendance_id", nullable = false)
+    private Attendance attendance;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private CorrectionRequestStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private CorrectionRequestType type;
+
+    @Column(name = "requested_by", nullable = false)
+    private Long requestedBy;
+
+    @Column(name = "requested_at", nullable = false)
+    private OffsetDateTime requestedAt;
+
+    @Column(name = "proposed_check_in_at")
+    private OffsetDateTime proposedCheckInAt;
+
+    @Column(name = "proposed_check_out_at")
+    private OffsetDateTime proposedCheckOutAt;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String reason;
+
+    protected CorrectionRequest() {}
+
+    public static CorrectionRequest pending(
+            Attendance attendance,
+            Long requestedBy,
+            OffsetDateTime requestedAt,
+            CorrectionRequestType type,
+            OffsetDateTime proposedCheckInAt,
+            OffsetDateTime proposedCheckOutAt,
+            String reason
+    ) {
+        CorrectionRequest r = new CorrectionRequest();
+        r.attendance = attendance;
+        r.requestedBy = requestedBy;
+        r.requestedAt = requestedAt;
+        r.status = CorrectionRequestStatus.PENDING;
+        r.type = type;
+        r.proposedCheckInAt = proposedCheckInAt;
+        r.proposedCheckOutAt = proposedCheckOutAt;
+        r.reason = reason;
+        return r;
+    }
+
+    public Long getId() { return id; }
+    public Attendance getAttendance() { return attendance; }
+    public CorrectionRequestStatus getStatus() { return status; }
+    public CorrectionRequestType getType() { return type; }
+    public Long getRequestedBy() { return requestedBy; }
+    public OffsetDateTime getRequestedAt() { return requestedAt; }
+    public OffsetDateTime getProposedCheckInAt() { return proposedCheckInAt; }
+    public OffsetDateTime getProposedCheckOutAt() { return proposedCheckOutAt; }
+    public String getReason() { return reason; }
+}
