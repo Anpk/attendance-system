@@ -6,9 +6,21 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Optional;
 import java.util.List;
 
 public interface CorrectionRequestRepository extends JpaRepository<CorrectionRequest, Long> {
+
+    /**
+     * 조회 합성 규칙(Final 값):
+     * - APPROVED 상태 중 "최신 1건만" 합성 적용
+     *
+     * 최신 기준은 approvedAt(권장) → 없다면 updatedAt/createdAt 중 프로젝트 기준으로 정렬 컬럼을 선택하세요.
+     */
+    Optional<CorrectionRequest> findFirstByAttendanceIdAndStatusOrderByApprovedAtDesc(
+            Long attendanceId,
+            CorrectionRequestStatus status
+    );
 
     boolean existsByAttendance_IdAndStatus(Long attendanceId, CorrectionRequestStatus status);
 

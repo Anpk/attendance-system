@@ -2,6 +2,12 @@ package io.github.anpk.attendanceapp.attendance.application.service;
 
 import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceActionResponse;
+import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceListItemResponse;
+import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceListResponse;
+import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceReadResponse;
+import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequest;
+import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestStatus;
+import io.github.anpk.attendanceapp.correction.infrastructure.repository.CorrectionRequestRepository;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
 import io.github.anpk.attendanceapp.error.ErrorCode;
@@ -12,15 +18,18 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.*;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class AttendanceService {
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final Pattern MONTH_PATTERN = Pattern.compile("^\\d{4}-\\d{2}$");
 
     // 업로드 파일 검증 정책(서버 측) - 필요 시 운영 환경에 맞게 조정
     private static final long MAX_PHOTO_BYTES = 5L * 1024 * 1024; // 5MB
@@ -32,9 +41,14 @@ public class AttendanceService {
     );
 
     private final AttendanceRepository attendanceRepository;
+    private final CorrectionRequestRepository correctionRequestRepository;
 
-    public AttendanceService(AttendanceRepository attendanceRepository) {
+    public AttendanceService(
+            AttendanceRepository attendanceRepository,
+            CorrectionRequestRepository correctionRequestRepository
+    ) {
         this.attendanceRepository = attendanceRepository;
+        this.correctionRequestRepository = correctionRequestRepository;
     }
 
     @Transactional
@@ -160,5 +174,136 @@ public class AttendanceService {
         photo.transferTo(filePath.toFile());
 
         return filePath.toString();
+    }
+
+    /**
+     * month=YYYY-MM 만 우선 지원
+     */
+    @Transactional(readOnly = true)
+    public AttendanceListResponse listMyAttendancesByMonth(Long userId, String month, int page, int size) {
+        YearMonth ym = parseYearMonthOrThrow(month);
+        LocalDate from = ym.atDay(1);
+        LocalDate to = ym.atEndOfMonth();
+
+        // ✅ 최소 구현: paging 없이 전체 조회가 이미 있다면 그걸 쓰세요.
+        // 아래는 "기간 조회" 메서드가 있다고 가정합니다.
+        List<Attendance> items = attendanceRepository.findAllByUserIdAndWorkDateBetweenOrderByWorkDateAsc(userId, from, to);
+
+        List<AttendanceListItemResponse> mapped = items.stream()
+                .map(a -> {
+                    FinalSnapshot snap = toFinalSnapshot(a);
+                    return new AttendanceListItemResponse(
+                            a.getId(),
+                            a.getWorkDate().toString(),
+                            snap.finalCheckInAt(),
+                            snap.finalCheckOutAt(),
+                            snap.isCorrected()
+                    );
+                })
+                .toList();
+
+        // page/size/totalElements는 "최소"로 고정값 처리 (프론트에서 필요 시 paging 확장)
+        return new AttendanceListResponse(mapped, 1, mapped.size(), mapped.size());
+    }
+
+    @Transactional(readOnly = true)
+    public AttendanceReadResponse getMyAttendance(Long userId, Long attendanceId) {
+        Attendance a = attendanceRepository.findByIdAndUserId(attendanceId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ATTENDANCE_NOT_FOUND, "근태 기록을 찾을 수 없습니다."));
+
+        FinalSnapshot snap = toFinalSnapshot(a);
+
+        // employeeId/siteId가 아직 없다면 null 처리
+        return new AttendanceReadResponse(
+                a.getId(),
+                null,
+                null,
+                a.getWorkDate().toString(),
+                snap.finalCheckInAt(),
+                snap.finalCheckOutAt(),
+                snap.isCorrected(),
+                snap.appliedCorrectionRequestId()
+        );
+    }
+
+    /**
+     * today 응답도 Final 합성 규칙 적용 (승인된 최신 정정 1건)
+     */
+    @Transactional(readOnly = true)
+    public FinalSnapshot getTodayFinalSnapshot(Long userId) {
+        LocalDate today = LocalDate.now(KST);
+        Attendance a = attendanceRepository.findByUserIdAndWorkDate(userId, today).orElse(null);
+        if (a == null) {
+            return FinalSnapshot.empty(today);
+        }
+        return toFinalSnapshot(a);
+    }
+
+    private YearMonth parseYearMonthOrThrow(String month) {
+        if (month == null || month.isBlank()) {
+            // 미입력 시 현재 월 기본값(최소 UX)
+            return YearMonth.now(KST);
+        }
+        if (!MONTH_PATTERN.matcher(month).matches()) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_MONTH_FORMAT,
+                    "month 형식이 올바르지 않습니다. 예: 2026-01"
+            );
+        }
+        int m = Integer.parseInt(month.substring(5, 7));
+        if (m < 1 || m > 12) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_MONTH_FORMAT,
+                    "month 값이 올바르지 않습니다. 01~12 범위여야 합니다."
+            );
+        }
+        return YearMonth.parse(month);
+    }
+
+    /**
+     * Final 합성 규칙:
+     * - APPROVED 중 최신 1건만 반영
+     * - PENDING/REJECTED/CANCELED 는 반영 금지
+     */
+    private FinalSnapshot toFinalSnapshot(Attendance a) {
+        CorrectionRequest approved = correctionRequestRepository
+                .findFirstByAttendanceIdAndStatusOrderByApprovedAtDesc(a.getId(), CorrectionRequestStatus.APPROVED)
+                .orElse(null);
+
+        if (approved == null) {
+            return new FinalSnapshot(
+                    a.getId(),
+                    a.getWorkDate(),
+                    a.getCheckInTime().atZone(KST).toOffsetDateTime(),
+                    a.getCheckOutTime().atZone(KST).toOffsetDateTime(),
+                    false,
+                    null
+            );
+        }
+
+        OffsetDateTime finalCheckIn = approved.getProposedCheckInAt() != null ? approved.getProposedCheckInAt() : a.getCheckInTime().atZone(KST).toOffsetDateTime();
+        OffsetDateTime finalCheckOut = approved.getProposedCheckOutAt() != null ? approved.getProposedCheckOutAt() : a.getCheckOutTime().atZone(KST).toOffsetDateTime();
+
+        return new FinalSnapshot(
+                a.getId(),
+                a.getWorkDate(),
+                finalCheckIn,
+                finalCheckOut,
+                true,
+                approved.getId()
+        );
+    }
+
+    public record FinalSnapshot(
+            Long attendanceId,
+            LocalDate workDate,
+            OffsetDateTime finalCheckInAt,
+            OffsetDateTime finalCheckOutAt,
+            boolean isCorrected,
+            Long appliedCorrectionRequestId
+    ) {
+        public static FinalSnapshot empty(LocalDate workDate) {
+            return new FinalSnapshot(null, workDate, null, null, false, null);
+        }
     }
 }

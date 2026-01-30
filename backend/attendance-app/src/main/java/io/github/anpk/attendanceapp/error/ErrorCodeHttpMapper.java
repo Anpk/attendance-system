@@ -40,6 +40,7 @@ public final class ErrorCodeHttpMapper {
         MAP.put(ErrorCode.MISSING_REQUIRED_PARAM, HttpStatus.BAD_REQUEST);
         MAP.put(ErrorCode.INVALID_REQUEST_PARAM, HttpStatus.BAD_REQUEST);
         MAP.put(ErrorCode.INVALID_REQUEST_PAYLOAD, HttpStatus.UNPROCESSABLE_ENTITY);
+        MAP.put(ErrorCode.INVALID_MONTH_FORMAT, HttpStatus.UNPROCESSABLE_ENTITY);
 
         // Framework / Endpoint
         MAP.put(ErrorCode.ENDPOINT_NOT_FOUND, HttpStatus.NOT_FOUND);

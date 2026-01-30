@@ -16,4 +16,8 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     Optional<Attendance> findByUserIdAndWorkDate(Long userId, LocalDate workDate);
 
     Page<Attendance> findByUserIdAndWorkDateBetween(Long userId, LocalDate from, LocalDate to, Pageable pageable);
+
+    List<Attendance> findAllByUserIdAndWorkDateBetweenOrderByWorkDateAsc(Long userId, LocalDate from, LocalDate to);
+
+    Optional<Attendance> findByIdAndUserId(Long attendanceId, Long userId);
 }

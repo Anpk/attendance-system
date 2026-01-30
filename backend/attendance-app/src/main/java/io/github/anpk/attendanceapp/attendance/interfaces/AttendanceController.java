@@ -55,10 +55,38 @@ public class AttendanceController {
         return ResponseEntity.ok(attendanceService.checkOut(userId));
     }
 
+    /**
+     * 단건 조회 (Final 값)
+     */
+    @GetMapping("/{attendanceId}")
+    public AttendanceReadResponse getOne(
+            @CurrentUserId Long userId,
+            @PathVariable Long attendanceId
+    ) {
+        return attendanceService.getMyAttendance(userId, attendanceId);
+    }
 
-    @GetMapping("/today")
-    public AttendanceActionResponse getTodayAttendance(@CurrentUserId Long userId) {
-        return attendanceService.getToday(userId);
+    /**
+     * 목록 조회: month=YYYY-MM 만 우선 지원
+     */
+    @GetMapping
+    public AttendanceListResponse list(
+            @CurrentUserId Long userId,
+            @RequestParam(required = false) String month
+    ) {
+        // 최소: paging 미지원이면 page/size 고정
+        return attendanceService.listMyAttendancesByMonth(userId, month, 1, 1000);
+    }
+
+    public AttendanceActionResponse today(@CurrentUserId Long userId) {
+        AttendanceService.FinalSnapshot snap = attendanceService.getTodayFinalSnapshot(userId);
+        return new AttendanceActionResponse(
+                snap.attendanceId(),
+                snap.workDate().toString(),
+                snap.finalCheckInAt(),
+                snap.finalCheckOutAt(),
+                snap.isCorrected()
+        );
     }
 
     /**

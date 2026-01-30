@@ -20,6 +20,9 @@ public enum ErrorCode {
     OPEN_ATTENDANCE_EXISTS,
     EMPLOYEE_INACTIVE,
 
+    // Attendance Read
+    INVALID_MONTH_FORMAT,
+
     // Correction Request
     CORRECTION_REQUEST_NOT_FOUND,
     PENDING_REQUEST_EXISTS,
