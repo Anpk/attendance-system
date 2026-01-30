@@ -133,6 +133,7 @@
 
 | Code | HTTP | Description |
 |------|------|-------------|
+| CORRECTION_REQUEST_NOT_FOUND | 404 | 정정 요청 없음 |
 | PENDING_REQUEST_EXISTS | 409 | 처리 중 요청 |
 | OUT_OF_CORRECTION_WINDOW | 422 | 정정 기간 초과 |
 | INVALID_TIME_ORDER | 422 | 시간 순서 오류 |

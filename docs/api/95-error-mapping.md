@@ -78,6 +78,7 @@
 
 | code | HTTP | error | Example |
 |---|---:|---|---|
+| CORRECTION_REQUEST_NOT_FOUND | 404 | NOT_FOUND | 정정 요청 조회 대상 없음 |
 | PENDING_REQUEST_EXISTS | 409 | CONFLICT | 동일 Attendance PENDING 중복 |
 | OUT_OF_CORRECTION_WINDOW | 422 | UNPROCESSABLE_ENTITY | 당월 외 정정 |
 | INVALID_TIME_ORDER | 422 | UNPROCESSABLE_ENTITY | 출근 ≥ 퇴근 |
