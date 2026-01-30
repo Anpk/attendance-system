@@ -2,6 +2,7 @@ package io.github.anpk.attendanceapp.correction.interfaces;
 
 import io.github.anpk.attendanceapp.auth.CurrentUserId;
 import io.github.anpk.attendanceapp.correction.application.service.CorrectionRequestService;
+import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestCancelResponse;
 import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestCreateRequest;
 import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestListResponse;
 import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestResponse;
@@ -42,5 +43,18 @@ public class CorrectionRequestController {
             @RequestParam(required = false) Integer size
     ) {
         return correctionRequestService.list(userId, scope, status, page, size);
+    }
+
+    /**
+     * 정정 요청 취소
+     * - POST /api/correction-requests/{requestId}/cancel
+     * - PENDING만 / 요청자 본인만
+     */
+    @PostMapping("/correction-requests/{requestId}/cancel")
+    public CorrectionRequestCancelResponse cancel(
+            @CurrentUserId Long userId,
+            @PathVariable Long requestId
+    ) {
+        return correctionRequestService.cancel(userId, requestId);
     }
 }

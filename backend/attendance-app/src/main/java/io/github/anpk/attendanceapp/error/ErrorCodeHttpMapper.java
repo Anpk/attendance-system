@@ -19,6 +19,7 @@ public final class ErrorCodeHttpMapper {
         MAP.put(ErrorCode.EMPLOYEE_INACTIVE, HttpStatus.FORBIDDEN);
 
         // Correction
+        MAP.put(ErrorCode.CORRECTION_REQUEST_NOT_FOUND, HttpStatus.NOT_FOUND);
         MAP.put(ErrorCode.PENDING_REQUEST_EXISTS, HttpStatus.CONFLICT);
         MAP.put(ErrorCode.OUT_OF_CORRECTION_WINDOW, HttpStatus.UNPROCESSABLE_ENTITY);
         MAP.put(ErrorCode.INVALID_TIME_ORDER, HttpStatus.UNPROCESSABLE_ENTITY);

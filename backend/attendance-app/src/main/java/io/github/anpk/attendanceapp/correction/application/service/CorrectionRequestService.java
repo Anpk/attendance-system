@@ -6,6 +6,7 @@ import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestSta
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestType;
 import io.github.anpk.attendanceapp.correction.infrastructure.repository.CorrectionRequestRepository;
 import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestCreateRequest;
+import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestCancelResponse;
 import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestListResponse;
 import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestResponse;
 import io.github.anpk.attendanceapp.error.BusinessException;
@@ -136,6 +137,40 @@ public class CorrectionRequestService {
                 .toList();
 
         return new CorrectionRequestListResponse(items, p, s, result.getTotalElements());
+    }
+
+
+    @Transactional
+    public CorrectionRequestCancelResponse cancel(Long userId, Long requestId) {
+        // 1) 요청 조회
+        var req = correctionRequestRepository.findById(requestId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.CORRECTION_REQUEST_NOT_FOUND,
+                        "정정 요청을 찾을 수 없습니다."
+                ));
+
+        // 2) 요청자 본인만 취소 가능 (ADMIN 예외는 권한체계 도입 시 반영)
+        if (!req.getRequestedBy().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
+
+        // 3) 상태는 반드시 PENDING
+        if (req.getStatus() != CorrectionRequestStatus.PENDING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_STATUS_TRANSITION,
+                    "PENDING 상태의 요청만 취소할 수 있습니다."
+            );
+        }
+
+        // 4) 취소 처리
+        var canceledAt = OffsetDateTime.now(KST);
+        req.cancel(canceledAt);
+
+        return new CorrectionRequestCancelResponse(
+                req.getId(),
+                req.getStatus(),
+                req.getCanceledAt()
+        );
     }
 
     private static CorrectionRequestType resolveType(CorrectionRequestCreateRequest req) {

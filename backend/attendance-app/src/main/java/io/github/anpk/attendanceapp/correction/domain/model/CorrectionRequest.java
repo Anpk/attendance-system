@@ -40,6 +40,9 @@ public class CorrectionRequest {
     @Column(name = "proposed_check_out_at")
     private OffsetDateTime proposedCheckOutAt;
 
+    @Column(name = "canceled_at")
+    private OffsetDateTime canceledAt;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String reason;
 
@@ -74,5 +77,15 @@ public class CorrectionRequest {
     public OffsetDateTime getRequestedAt() { return requestedAt; }
     public OffsetDateTime getProposedCheckInAt() { return proposedCheckInAt; }
     public OffsetDateTime getProposedCheckOutAt() { return proposedCheckOutAt; }
+    public OffsetDateTime getCanceledAt() { return canceledAt; }
     public String getReason() { return reason; }
+
+    /**
+     * 정정 요청 취소
+     * - Contract: PENDING -> CANCELED만 허용
+     */
+    public void cancel(OffsetDateTime canceledAt) {
+        this.status = CorrectionRequestStatus.CANCELED;
+        this.canceledAt = canceledAt;
+    }
 }
