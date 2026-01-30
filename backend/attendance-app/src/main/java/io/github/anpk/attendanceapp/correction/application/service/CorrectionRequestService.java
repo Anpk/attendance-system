@@ -5,10 +5,9 @@ import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequest;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestStatus;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestType;
 import io.github.anpk.attendanceapp.correction.infrastructure.repository.CorrectionRequestRepository;
-import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestCreateRequest;
-import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestCancelResponse;
-import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestListResponse;
-import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestResponse;
+import io.github.anpk.attendanceapp.correction.interfaces.dto.*;
+import io.github.anpk.attendanceapp.employee.domain.EmployeeRole;
+import io.github.anpk.attendanceapp.employee.infrastructure.EmployeeRepository;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.error.ErrorCode;
 import org.springframework.data.domain.PageRequest;
@@ -27,13 +26,16 @@ public class CorrectionRequestService {
 
     private final AttendanceRepository attendanceRepository;
     private final CorrectionRequestRepository correctionRequestRepository;
+    private final EmployeeRepository employeeRepository;
 
     public CorrectionRequestService(
             AttendanceRepository attendanceRepository,
-            CorrectionRequestRepository correctionRequestRepository
+            CorrectionRequestRepository correctionRequestRepository,
+            EmployeeRepository employeeRepository
     ) {
         this.attendanceRepository = attendanceRepository;
         this.correctionRequestRepository = correctionRequestRepository;
+        this.employeeRepository = employeeRepository;
     }
 
     @Transactional
@@ -111,32 +113,66 @@ public class CorrectionRequestService {
 
     @Transactional(readOnly = true)
     public CorrectionRequestListResponse list(Long userId, String scope, String status, Integer page, Integer size) {
-        // MVP 1차: requested_by_me만 지원
-        if (!"requested_by_me".equals(scope)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "현재는 scope=requested_by_me만 지원합니다.");
-        }
 
         int p = (page == null || page < 1) ? 1 : page;
         int s = (size == null || size < 1) ? 20 : size;
 
         var pageable = PageRequest.of(p - 1, s, Sort.by(Sort.Direction.DESC, "requestedAt"));
 
-        var result = (status == null || status.isBlank())
-                ? correctionRequestRepository.findByRequestedBy(userId, pageable)
-                : correctionRequestRepository.findByRequestedByAndStatus(userId, parseStatus(status), pageable);
+        // scope 분기
+        if ("requested_by_me".equals(scope)) {
+            var result = (status == null || status.isBlank())
+                    ? correctionRequestRepository.findByRequestedBy(userId, pageable)
+                    : correctionRequestRepository.findByRequestedByAndStatus(userId, parseStatus(status), pageable);
 
-        List<CorrectionRequestResponse> items = result.getContent().stream()
-                .map(r -> new CorrectionRequestResponse(
-                        r.getId(),
-                        r.getAttendance().getId(),
-                        r.getStatus(),
-                        r.getType(),
-                        r.getRequestedBy(),
-                        r.getRequestedAt()
-                ))
-                .toList();
+            List<CorrectionRequestResponse> items = result.getContent().stream()
+                    .map(r -> new CorrectionRequestResponse(
+                            r.getId(),
+                            r.getAttendance().getId(),
+                            r.getStatus(),
+                            r.getType(),
+                            r.getRequestedBy(),
+                            r.getRequestedAt()
+                    ))
+                    .toList();
 
-        return new CorrectionRequestListResponse(items, p, s, result.getTotalElements());
+            return new CorrectionRequestListResponse(items, p, s, result.getTotalElements());
+        }
+
+        if ("approvable".equals(scope)) {
+            // 승인 대기함은 권한자만 접근 가능 (MANAGER/ADMIN)
+            var approver = employeeRepository.findById(userId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
+            if (!approver.isActive()) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+            }
+            if (approver.getRole() != EmployeeRole.MANAGER && approver.getRole() != EmployeeRole.ADMIN) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+            }
+
+            CorrectionRequestStatus st = (status == null || status.isBlank())
+                    ? CorrectionRequestStatus.PENDING
+                    : parseStatus(status);
+
+            var result = (approver.getRole() == EmployeeRole.ADMIN)
+                    ? correctionRequestRepository.findByStatus(st, pageable)
+                    : listApprovableForManager(approver.getSiteId(), userId, st, pageable);
+
+            List<CorrectionRequestResponse> items = result.getContent().stream()
+                    .map(r -> new CorrectionRequestResponse(
+                            r.getId(),
+                            r.getAttendance().getId(),
+                            r.getStatus(),
+                            r.getType(),
+                            r.getRequestedBy(),
+                            r.getRequestedAt()
+                    ))
+                    .toList();
+
+            return new CorrectionRequestListResponse(items, p, s, result.getTotalElements());
+        }
+
+        throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "지원하지 않는 scope 입니다.");
     }
 
 
@@ -171,6 +207,113 @@ public class CorrectionRequestService {
                 req.getStatus(),
                 req.getCanceledAt()
         );
+    }
+
+    @Transactional
+    public CorrectionRequestProcessResponse approve(Long userId, Long requestId, CorrectionRequestApproveRequest body) {
+        var req = correctionRequestRepository.findById(requestId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CORRECTION_REQUEST_NOT_FOUND, "정정 요청을 찾을 수 없습니다."));
+
+        authorizeApprover(userId, req);
+
+        if (req.getStatus() != CorrectionRequestStatus.PENDING) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION, "PENDING 상태만 처리할 수 있습니다.");
+        }
+
+        String comment = (body == null || body.comment() == null) ? null : body.comment().trim();
+        var processedAt = OffsetDateTime.now(KST);
+        req.approve(userId, processedAt, (comment == null || comment.isBlank()) ? null : comment);
+
+        return new CorrectionRequestProcessResponse(
+                req.getId(),
+                req.getStatus(),
+                req.getProcessedAt(),
+                req.getProcessedBy(),
+                req.getApproveComment(),
+                null
+        );
+    }
+
+    @Transactional
+    public CorrectionRequestProcessResponse reject(Long userId, Long requestId, CorrectionRequestRejectRequest body) {
+        var req = correctionRequestRepository.findById(requestId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CORRECTION_REQUEST_NOT_FOUND, "정정 요청을 찾을 수 없습니다."));
+
+        authorizeApprover(userId, req);
+
+        if (req.getStatus() != CorrectionRequestStatus.PENDING) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION, "PENDING 상태만 처리할 수 있습니다.");
+        }
+
+        String reason = (body == null || body.reason() == null) ? "" : body.reason().trim();
+        if (reason.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "반려 사유(reason)는 필수입니다.");
+        }
+
+        var processedAt = OffsetDateTime.now(KST);
+        req.reject(userId, processedAt, reason);
+
+        return new CorrectionRequestProcessResponse(
+                req.getId(),
+                req.getStatus(),
+                req.getProcessedAt(),
+                req.getProcessedBy(),
+                null,
+                req.getRejectReason()
+        );
+    }
+
+    private org.springframework.data.domain.Page<CorrectionRequest> listApprovableForManager(
+            Long siteId,
+            Long approverUserId,
+            CorrectionRequestStatus status,
+            org.springframework.data.domain.Pageable pageable
+    ) {
+        // 동일 site의 활성 사용자 목록을 가져온 뒤, 해당 사용자가 만든 요청만 노출
+        var userIds = employeeRepository.findActiveUserIdsBySiteId(siteId);
+        // 메이커-체커: 본인 요청은 승인 대기함에 노출하지 않음
+        userIds.removeIf(id -> id.equals(approverUserId));
+        if (userIds.isEmpty()) {
+            return org.springframework.data.domain.Page.empty(pageable);
+        }
+        return correctionRequestRepository.findByRequestedByInAndStatus(userIds, status, pageable);
+    }
+
+    /**
+     * 승인/반려 권한 강제 (최소)
+     * - ADMIN: 전체 허용
+     * - MANAGER: 동일 site만 허용
+     * - 메이커-체커: 작성자 본인 처리 금지
+     */
+    private void authorizeApprover(Long approverUserId, CorrectionRequest req) {
+        // 메이커-체커(작성자=처리자 금지)
+        if (req.getRequestedBy().equals(approverUserId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "작성자는 자신의 요청을 승인/반려할 수 없습니다.");
+        }
+
+        var approver = employeeRepository.findById(approverUserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
+        if (!approver.isActive()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
+
+        if (approver.getRole() == EmployeeRole.ADMIN) {
+            return;
+        }
+
+        if (approver.getRole() != EmployeeRole.MANAGER) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
+
+        // 요청자의 site와 승인자의 site가 동일해야 함
+        var requester = employeeRepository.findById(req.getRequestedBy())
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한 판정에 필요한 직원 정보가 없습니다."));
+        if (!requester.isActive()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
+        if (!requester.getSiteId().equals(approver.getSiteId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
     }
 
     private static CorrectionRequestType resolveType(CorrectionRequestCreateRequest req) {
