@@ -2,10 +2,7 @@ package io.github.anpk.attendanceapp.correction.interfaces;
 
 import io.github.anpk.attendanceapp.auth.CurrentUserId;
 import io.github.anpk.attendanceapp.correction.application.service.CorrectionRequestService;
-import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestCancelResponse;
-import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestCreateRequest;
-import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestListResponse;
-import io.github.anpk.attendanceapp.correction.interfaces.dto.CorrectionRequestResponse;
+import io.github.anpk.attendanceapp.correction.interfaces.dto.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -56,5 +53,31 @@ public class CorrectionRequestController {
             @PathVariable Long requestId
     ) {
         return correctionRequestService.cancel(userId, requestId);
+    }
+
+    /**
+     * 정정 요청 승인
+     * - PENDING만 가능 / MANAGER(동일 site) 또는 ADMIN / 메이커-체커 적용
+     */
+    @PostMapping("/correction-requests/{requestId}/approve")
+    public CorrectionRequestProcessResponse approve(
+            @CurrentUserId Long userId,
+            @PathVariable Long requestId,
+            @RequestBody(required = false) CorrectionRequestApproveRequest body
+    ) {
+        return correctionRequestService.approve(userId, requestId, body);
+    }
+
+    /**
+     * 정정 요청 반려
+     * - PENDING만 가능 / MANAGER(동일 site) 또는 ADMIN / 메이커-체커 적용
+     */
+    @PostMapping("/correction-requests/{requestId}/reject")
+    public CorrectionRequestProcessResponse reject(
+            @CurrentUserId Long userId,
+            @PathVariable Long requestId,
+            @RequestBody CorrectionRequestRejectRequest body
+    ) {
+        return correctionRequestService.reject(userId, requestId, body);
     }
 }

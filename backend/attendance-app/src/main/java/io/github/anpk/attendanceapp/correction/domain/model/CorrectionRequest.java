@@ -43,6 +43,18 @@ public class CorrectionRequest {
     @Column(name = "canceled_at")
     private OffsetDateTime canceledAt;
 
+    @Column(name = "processed_at")
+    private OffsetDateTime processedAt;
+
+    @Column(name = "processed_by")
+    private Long processedBy;
+
+    @Column(name = "approve_comment", columnDefinition = "TEXT")
+    private String approveComment;
+
+    @Column(name = "reject_reason", columnDefinition = "TEXT")
+    private String rejectReason;
+
     @Column(nullable = false, columnDefinition = "TEXT")
     private String reason;
 
@@ -78,6 +90,10 @@ public class CorrectionRequest {
     public OffsetDateTime getProposedCheckInAt() { return proposedCheckInAt; }
     public OffsetDateTime getProposedCheckOutAt() { return proposedCheckOutAt; }
     public OffsetDateTime getCanceledAt() { return canceledAt; }
+    public OffsetDateTime getProcessedAt() { return processedAt; }
+    public Long getProcessedBy() { return processedBy; }
+    public String getApproveComment() { return approveComment; }
+    public String getRejectReason() { return rejectReason; }
     public String getReason() { return reason; }
 
     /**
@@ -87,5 +103,29 @@ public class CorrectionRequest {
     public void cancel(OffsetDateTime canceledAt) {
         this.status = CorrectionRequestStatus.CANCELED;
         this.canceledAt = canceledAt;
+    }
+
+    /**
+     * 정정 요청 승인 처리
+     * - 상태 전이 검증은 서비스에서 수행(최소 diff)
+     */
+    public void approve(Long approverUserId, OffsetDateTime processedAt, String comment) {
+        this.status = CorrectionRequestStatus.APPROVED;
+        this.processedBy = approverUserId;
+        this.processedAt = processedAt;
+        this.approveComment = comment;
+        this.rejectReason = null;
+    }
+
+    /**
+     * 정정 요청 반려 처리
+     * - 상태 전이/필수값 검증은 서비스에서 수행(최소 diff)
+     */
+    public void reject(Long approverUserId, OffsetDateTime processedAt, String rejectReason) {
+        this.status = CorrectionRequestStatus.REJECTED;
+        this.processedBy = approverUserId;
+        this.processedAt = processedAt;
+        this.rejectReason = rejectReason;
+        this.approveComment = null;
     }
 }
