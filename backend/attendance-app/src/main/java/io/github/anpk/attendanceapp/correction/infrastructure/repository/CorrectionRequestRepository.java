@@ -15,12 +15,9 @@ public interface CorrectionRequestRepository extends JpaRepository<CorrectionReq
      * 조회 합성 규칙(Final 값):
      * - APPROVED 상태 중 "최신 1건만" 합성 적용
      *
-     * 최신 기준은 approvedAt(권장) → 없다면 updatedAt/createdAt 중 프로젝트 기준으로 정렬 컬럼을 선택하세요.
+     * 최신 기준은 processedAt 기준(현재 엔티티 필드와 정합)
      */
-    Optional<CorrectionRequest> findFirstByAttendanceIdAndStatusOrderByApprovedAtDesc(
-            Long attendanceId,
-            CorrectionRequestStatus status
-    );
+    Optional<CorrectionRequest> findFirstByAttendance_IdAndStatusOrderByProcessedAtDesc(Long attendanceId, CorrectionRequestStatus status);
 
     boolean existsByAttendance_IdAndStatus(Long attendanceId, CorrectionRequestStatus status);
 

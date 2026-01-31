@@ -1,14 +1,10 @@
 package io.github.anpk.attendanceapp.attendance.interfaces;
 
-import io.github.anpk.attendanceapp.attendance.application.service.AttendanceQueryService;
 import io.github.anpk.attendanceapp.attendance.application.service.AttendanceService;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceActionResponse;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceListResponse;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceReadResponse;
 import io.github.anpk.attendanceapp.auth.CurrentUserId;
-import io.github.anpk.attendanceapp.error.BusinessException;
-import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
-import io.github.anpk.attendanceapp.error.ErrorCode;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -17,27 +13,17 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/attendance")
 public class AttendanceController {
 
     private final AttendanceService attendanceService;
-    private final AttendanceQueryService attendanceQueryService;
 
     public AttendanceController(
-            AttendanceService attendanceService,
-            AttendanceQueryService attendanceQueryService
+            AttendanceService attendanceService
     ) {
         this.attendanceService = attendanceService;
-        this.attendanceQueryService = attendanceQueryService;
     }
 
     // 출근 기록 저장
@@ -56,28 +42,10 @@ public class AttendanceController {
     }
 
     /**
-     * 단건 조회 (Final 값)
+     * 오늘 상태 조회 (Final 합성 규칙 적용)
+     * - /{attendanceId} 와 충돌 방지: attendanceId는 숫자만 매칭하도록 아래에서 제한
      */
-    @GetMapping("/{attendanceId}")
-    public AttendanceReadResponse getOne(
-            @CurrentUserId Long userId,
-            @PathVariable Long attendanceId
-    ) {
-        return attendanceService.getMyAttendance(userId, attendanceId);
-    }
-
-    /**
-     * 목록 조회: month=YYYY-MM 만 우선 지원
-     */
-    @GetMapping
-    public AttendanceListResponse list(
-            @CurrentUserId Long userId,
-            @RequestParam(required = false) String month
-    ) {
-        // 최소: paging 미지원이면 page/size 고정
-        return attendanceService.listMyAttendancesByMonth(userId, month, 1, 1000);
-    }
-
+    @GetMapping("/today")
     public AttendanceActionResponse today(@CurrentUserId Long userId) {
         AttendanceService.FinalSnapshot snap = attendanceService.getTodayFinalSnapshot(userId);
         return new AttendanceActionResponse(
@@ -90,28 +58,27 @@ public class AttendanceController {
     }
 
     /**
-     * Attendance 목록 조회 (월 단위)
-     * - 현재 MVP 1차: month(YYYY-MM)만 우선 지원
+     * 목록 조회: month=YYYY-MM 만 우선 지원
+     * - 최소 UX: month 미입력 시 이번 달 기본값은 Service에서 처리
      */
     @GetMapping
     public AttendanceListResponse list(
             @CurrentUserId Long userId,
-            @RequestParam String month,
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size
+            @RequestParam(required = false) String month
     ) {
-        return attendanceQueryService.listByMonth(userId, month, page, size);
+        // 최소: paging 미지원이면 page/size 고정
+        return attendanceService.listMyAttendancesByMonth(userId, month, 1, 1000);
     }
 
     /**
      * Attendance 단건 조회
-     * - /today 와 충돌 방지를 위해 숫자 패턴만 매칭
+     * - /today 와 충돌 방지: 숫자 패턴만 매칭
      */
     @GetMapping("/{attendanceId:\\d+}")
     public AttendanceReadResponse read(
             @CurrentUserId Long userId,
             @PathVariable Long attendanceId
     ) {
-        return attendanceQueryService.read(attendanceId, userId);
+        return attendanceService.getMyAttendance(userId, attendanceId);
     }
 }

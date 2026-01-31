@@ -176,8 +176,16 @@ public class AttendanceService {
         return filePath.toString();
     }
 
+    // =============================================================
+    // 조회(READ) API 전용
+    // - Controller에서 호출하는 조회 전용 메서드 묶음
+    // - Final 합성 규칙(승인된 최신 정정 1건) 적용 결과를 반환
+    // =============================================================
+
     /**
-     * month=YYYY-MM 만 우선 지원
+     * 월별 근태 목록 조회 (month=YYYY-MM 만 우선 지원)
+     * - month 미입력 시: KST 기준 현재 월 기본값(최소 UX)
+     * - 응답 시간값은 Final 합성 규칙(승인된 최신 정정 1건) 적용 결과
      */
     @Transactional(readOnly = true)
     public AttendanceListResponse listMyAttendancesByMonth(Long userId, String month, int page, int size) {
@@ -267,7 +275,7 @@ public class AttendanceService {
      */
     private FinalSnapshot toFinalSnapshot(Attendance a) {
         CorrectionRequest approved = correctionRequestRepository
-                .findFirstByAttendanceIdAndStatusOrderByApprovedAtDesc(a.getId(), CorrectionRequestStatus.APPROVED)
+                .findFirstByAttendance_IdAndStatusOrderByProcessedAtDesc(a.getId(), CorrectionRequestStatus.APPROVED)
                 .orElse(null);
 
         if (approved == null) {
@@ -293,6 +301,11 @@ public class AttendanceService {
                 approved.getId()
         );
     }
+
+    /**
+     * 조회 응답 조립에 사용하는 내부 스냅샷
+     * - Attendance 원본 + 승인된 최신 정정 1건을 합성한 최종(Final) 값
+     */
 
     public record FinalSnapshot(
             Long attendanceId,
