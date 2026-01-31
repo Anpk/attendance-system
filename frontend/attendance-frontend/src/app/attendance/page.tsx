@@ -7,6 +7,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
 import type { AttendanceActionResponse } from '@/lib/api/types';
+import AppHeader from '@/app/_components/AppHeader';
 
 export default function AttendancePage() {
   const { user } = useAuth();
@@ -58,20 +59,6 @@ export default function AttendancePage() {
 
   const isCheckedIn = today.checkInAt !== null;
   const isCheckedOut = today.checkOutAt !== null;
-
-  function toUploadUserMessage(e: unknown): string {
-    // apiFetch 에러 형태가 환경에 따라 다를 수 있어 방어적으로 처리
-    const anyErr = e as any;
-    const status = anyErr?.status ?? anyErr?.response?.status;
-    const code = anyErr?.code ?? anyErr?.response?.code ?? anyErr?.data?.code;
-
-    // 사용자 입력 오류(업로드 제약 위반)는 메시지를 UX 관점으로 표준화
-    if (status === 422 || code === 'INVALID_REQUEST_PAYLOAD') {
-      return '이미지 파일만 업로드할 수 있습니다. (최대 5MB)';
-    }
-
-    return toUserMessage(e);
-  }
 
   function setFlashMessage(next: string) {
     // 새 메시지가 들어오면 기존 타이머는 항상 정리
@@ -174,7 +161,7 @@ export default function AttendancePage() {
 
       setFlashMessage('✅ 처리되었습니다.');
     } catch (e) {
-      setFlashMessage(`❌ ${toUploadUserMessage(e)}`);
+      setFlashMessage(`❌ ${toActionUserMessage(e)}`);
     } finally {
       inflightActionRef.current = null;
       inflightRef.current = false;
@@ -229,7 +216,7 @@ export default function AttendancePage() {
 
       setFlashMessage('✅ 처리되었습니다.');
     } catch (e) {
-      setFlashMessage(`❌ ${toUploadUserMessage(e)}`);
+      setFlashMessage(`❌ ${toActionUserMessage(e)}`);
     } finally {
       inflightActionRef.current = null;
       inflightRef.current = false;
@@ -252,46 +239,50 @@ export default function AttendancePage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6">
-      <h1 className="text-3xl font-bold">근태 관리</h1>
+    <div className="min-h-screen">
+      <AppHeader />
 
-      <p className="text-gray-600">로그인 사용자 ID: {user?.userId}</p>
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
+        <h1 className="text-2xl font-bold">출/퇴근</h1>
 
-      {/* 숨김 파일 입력: 출근 버튼이 클릭 트리거 */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handlePhotoSelected}
-      />
+        <p className="text-gray-600">로그인 사용자 ID: {user?.userId}</p>
 
-      <div className="flex gap-4">
-        <button
-          disabled={loading || isCheckedIn}
-          aria-busy={loading}
-          className="rounded bg-blue-600 px-6 py-3 text-white disabled:opacity-50"
-          onClick={handleCheckInClick}
-        >
-          {loading && inflightActionRef.current === 'checkin'
-            ? '처리 중...'
-            : '출근'}
-        </button>
+        {/* 숨김 파일 입력: 출근 버튼이 클릭 트리거 */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handlePhotoSelected}
+        />
 
-        <button
-          disabled={loading || !isCheckedIn || isCheckedOut}
-          aria-busy={loading}
-          className="rounded bg-green-600 px-6 py-3 text-white disabled:opacity-50"
-          onClick={handleCheckOut}
-        >
-          {loading && inflightActionRef.current === 'checkout'
-            ? '처리 중...'
-            : '퇴근'}
-        </button>
-      </div>
+        <div className="flex gap-4">
+          <button
+            disabled={loading || isCheckedIn}
+            aria-busy={loading}
+            className="rounded bg-blue-600 px-6 py-3 text-white disabled:opacity-50"
+            onClick={handleCheckInClick}
+          >
+            {loading && inflightActionRef.current === 'checkin'
+              ? '처리 중...'
+              : '출근'}
+          </button>
 
-      {message && <p className="text-lg">{message}</p>}
-    </main>
+          <button
+            disabled={loading || !isCheckedIn || isCheckedOut}
+            aria-busy={loading}
+            className="rounded bg-green-600 px-6 py-3 text-white disabled:opacity-50"
+            onClick={handleCheckOut}
+          >
+            {loading && inflightActionRef.current === 'checkout'
+              ? '처리 중...'
+              : '퇴근'}
+          </button>
+        </div>
+
+        {message && <p className="text-lg">{message}</p>}
+      </main>
+    </div>
   );
 }

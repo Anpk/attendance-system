@@ -22,7 +22,7 @@ export default function AppHeader() {
             출/퇴근
           </Link>
           <Link
-            href="/attendance/month"
+            href="/attendance/monthly"
             className="rounded px-2 py-1 hover:bg-gray-100"
           >
             월별 목록
