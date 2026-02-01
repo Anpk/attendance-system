@@ -2,7 +2,7 @@
 
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
@@ -81,11 +81,31 @@ export default function AttendancePage() {
 
   function toActionUserMessage(e: unknown): string {
     // 업로드/액션 공통 에러 메시지 톤 통일
-    const anyErr = e as any;
-    const status = anyErr?.status ?? anyErr?.response?.status;
-    const code = anyErr?.code ?? anyErr?.response?.code ?? anyErr?.data?.code;
+    // any 금지: unknown을 안전하게 좁혀서 필요한 값만 추출
+    const errObj =
+      typeof e === 'object' && e !== null ? (e as Record<string, unknown>) : {};
+    const response =
+      typeof errObj.response === 'object' && errObj.response !== null
+        ? (errObj.response as Record<string, unknown>)
+        : {};
+    const data =
+      typeof errObj.data === 'object' && errObj.data !== null
+        ? (errObj.data as Record<string, unknown>)
+        : {};
+
+    const status =
+      (typeof errObj.status === 'number' ? errObj.status : undefined) ??
+      (typeof response.status === 'number' ? response.status : undefined);
+
+    const code =
+      (typeof errObj.code === 'string' ? errObj.code : undefined) ??
+      (typeof response.code === 'string' ? response.code : undefined) ??
+      (typeof data.code === 'string' ? data.code : undefined);
+
     const serverMessage =
-      anyErr?.message ?? anyErr?.response?.message ?? anyErr?.data?.message;
+      (typeof errObj.message === 'string' ? errObj.message : undefined) ??
+      (typeof response.message === 'string' ? response.message : undefined) ??
+      (typeof data.message === 'string' ? data.message : undefined);
 
     // 422: 업로드/요청값 오류는 정책 문구로 표준화
     if (status === 422 || code === 'INVALID_REQUEST_PAYLOAD') {
@@ -107,7 +127,7 @@ export default function AttendancePage() {
   }
 
   // 오늘 출근 상태 조회
-  async function fetchTodayAttendance() {
+  const fetchTodayAttendance = useCallback(async () => {
     if (!user) return;
     try {
       const data = await apiFetch<AttendanceActionResponse>(
@@ -121,7 +141,7 @@ export default function AttendancePage() {
       // today 조회 실패는 치명적 실패로 처리하지 않음(UX 정책)
       console.error('출근 상태 조회 실패', e);
     }
-  }
+  }, [user, baseUrl]);
 
   useEffect(() => {
     // 로그인 전/로그아웃 상태면 로그인 페이지로 보냄
@@ -132,7 +152,7 @@ export default function AttendancePage() {
 
     // 로그인 된 경우만 오늘 출근 상태 조회
     fetchTodayAttendance();
-  }, [user, router, baseUrl]);
+  }, [user, router, baseUrl, fetchTodayAttendance]);
 
   // 체크인: 사진 업로드(멀티파트)로 처리
   async function checkInWithPhoto(photo: File) {
