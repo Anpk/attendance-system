@@ -19,7 +19,7 @@ export default function Home() {
         console.error(err);
         setMessage('❌ 백엔드 연결 실패 (콘솔 확인)');
       });
-  }, []);
+  }, [baseUrl]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4">

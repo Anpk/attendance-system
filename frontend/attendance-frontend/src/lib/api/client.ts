@@ -3,16 +3,16 @@ type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown; // JSON 자동 stringify
 };
 
-function isApiErrorResponse(x: any): x is ApiErrorResponse {
+function isApiErrorResponse(x: unknown): x is ApiErrorResponse {
   return (
-    x &&
+    !!x &&
     typeof x === 'object' &&
-    typeof x.timestamp === 'string' &&
-    typeof x.status === 'number' &&
-    typeof x.error === 'string' &&
-    typeof x.code === 'string' &&
-    typeof x.message === 'string' &&
-    typeof x.path === 'string'
+    typeof (x as Record<string, unknown>).timestamp === 'string' &&
+    typeof (x as Record<string, unknown>).status === 'number' &&
+    typeof (x as Record<string, unknown>).error === 'string' &&
+    typeof (x as Record<string, unknown>).code === 'string' &&
+    typeof (x as Record<string, unknown>).message === 'string' &&
+    typeof (x as Record<string, unknown>).path === 'string'
   );
 }
 
