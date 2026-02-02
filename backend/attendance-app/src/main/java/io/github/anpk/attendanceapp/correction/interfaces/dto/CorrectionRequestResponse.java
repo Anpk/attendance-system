@@ -11,5 +11,8 @@ public record CorrectionRequestResponse(
         CorrectionRequestStatus status,
         CorrectionRequestType type,
         Long requestedBy,
-        OffsetDateTime requestedAt
+        OffsetDateTime requestedAt,
+        OffsetDateTime proposedCheckInAt,
+        OffsetDateTime proposedCheckOutAt,
+        String reason
 ) {}

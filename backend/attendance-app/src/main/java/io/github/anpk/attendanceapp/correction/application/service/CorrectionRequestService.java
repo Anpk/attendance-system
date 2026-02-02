@@ -107,7 +107,10 @@ public class CorrectionRequestService {
                 saved.getStatus(),
                 saved.getType(),
                 saved.getRequestedBy(),
-                saved.getRequestedAt()
+                saved.getRequestedAt(),
+                saved.getProposedCheckInAt(),
+                saved.getProposedCheckOutAt(),
+                saved.getReason()
         );
     }
 
@@ -132,7 +135,10 @@ public class CorrectionRequestService {
                             r.getStatus(),
                             r.getType(),
                             r.getRequestedBy(),
-                            r.getRequestedAt()
+                            r.getRequestedAt(),
+                            r.getProposedCheckInAt(),
+                            r.getProposedCheckOutAt(),
+                            r.getReason()
                     ))
                     .toList();
 
@@ -165,7 +171,10 @@ public class CorrectionRequestService {
                             r.getStatus(),
                             r.getType(),
                             r.getRequestedBy(),
-                            r.getRequestedAt()
+                            r.getRequestedAt(),
+                            r.getProposedCheckOutAt(),
+                            r.getProposedCheckInAt(),
+                            r.getReason()
                     ))
                     .toList();
 
