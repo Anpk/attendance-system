@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useAuth } from '../context/AuthContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -108,26 +109,20 @@ export default function CorrectionsPage() {
             <ul className="divide-y">
               {items.map((it) => (
                 <li key={it.requestId} className="px-4 py-3 text-sm">
-                  <button
-                    type="button"
-                    className="w-full text-left"
-                    onClick={() => setSelected(it)}
+                  <Link
+                    href={`/corrections/${it.requestId}`}
+                    className="block w-full"
                   >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="font-medium">
-                          요청 #{it.requestId} · 근태 #{it.attendanceId}
+                          근태 #{it.attendanceId}
                         </span>
-                        <span className="text-gray-600">
-                          {fmtDate(it.requestedAt)} · {it.type}
-                        </span>
+                        <span className="text-gray-600">상태 {it.status}</span>
                       </div>
-
-                      <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                        {it.status}
-                      </span>
+                      <span className="text-xs text-gray-500">상세 보기</span>
                     </div>
-                  </button>
+                  </Link>
                 </li>
               ))}
             </ul>
