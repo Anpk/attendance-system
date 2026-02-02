@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.Optional;
 import java.util.List;
 
@@ -28,4 +29,7 @@ public interface CorrectionRequestRepository extends JpaRepository<CorrectionReq
     Page<CorrectionRequest> findByStatus(CorrectionRequestStatus status, Pageable pageable);
 
     Page<CorrectionRequest> findByRequestedByInAndStatus(List<Long> requestedBy, CorrectionRequestStatus status, Pageable pageable);
+
+    // 월별 목록에서 "내 PENDING 정정 요청 존재" 합성용(IN 1번)
+    List<CorrectionRequest> findByRequestedByAndStatusAndAttendance_IdIn(Long requestedBy, CorrectionRequestStatus status, Collection<Long> attendanceId);
 }

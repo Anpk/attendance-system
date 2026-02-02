@@ -8,25 +8,13 @@ import java.time.ZoneId;
 /**
  * Attendance 목록 아이템 DTO
  * - Contract: 목록도 Final 값만 반환
+ * - isCorrected: 승인된 정정 1건이 합성되어 Final 값이 원본과 달라졌는지 여부(서비스에서 판정)
  */
 public record AttendanceListItemResponse(
         Long attendanceId,
         String workDate,
         OffsetDateTime checkInAt,
         OffsetDateTime checkOutAt,
-        boolean isCorrected
-) {
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
-    public static AttendanceListItemResponse from(Attendance a) {
-        var in = (a.getCheckInTime() == null) ? null : a.getCheckInTime().atZone(KST).toOffsetDateTime();
-        var out = (a.getCheckOutTime() == null) ? null : a.getCheckOutTime().atZone(KST).toOffsetDateTime();
-        return new AttendanceListItemResponse(
-                a.getId(),
-                a.getWorkDate().toString(),
-                in,
-                out,
-                false // TODO(contract): 승인된 정정 존재 시 true
-        );
-    }
-}
+        boolean isCorrected,
+        boolean hasPendingCorrection
+) {}

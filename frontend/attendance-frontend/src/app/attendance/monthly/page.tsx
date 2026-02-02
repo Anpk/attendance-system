@@ -14,6 +14,8 @@ type AttendanceListItem = {
   checkInAt: string | null;
   checkOutAt: string | null;
   isCorrected: boolean;
+  // 백엔드 합성 필드: 해당 근태에 "내 PENDING 정정 요청" 존재 여부
+  hasPendingCorrection?: boolean;
 };
 
 type AttendanceListResponse = {
@@ -149,15 +151,23 @@ export default function AttendanceMonthPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {it.isCorrected ? (
-                        <span className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-800">
-                          정정 반영
-                        </span>
-                      ) : (
-                        <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                          원본
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {it.hasPendingCorrection ? (
+                          <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-800">
+                            정정 대기
+                          </span>
+                        ) : null}
+
+                        {it.isCorrected ? (
+                          <span className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-800">
+                            정정 반영
+                          </span>
+                        ) : (
+                          <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
+                            원본
+                          </span>
+                        )}
+                      </div>
                       <button
                         type="button"
                         className="rounded bg-gray-900 px-2 py-1 text-xs text-white hover:bg-black disabled:opacity-50"
