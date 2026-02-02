@@ -28,7 +28,7 @@ export default function AppHeader() {
             월별 목록
           </Link>
           <Link
-            href="/attendance/corrections"
+            href="/corrections"
             className="rounded px-2 py-1 hover:bg-gray-100"
           >
             정정 요청함

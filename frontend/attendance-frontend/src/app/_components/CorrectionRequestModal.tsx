@@ -168,12 +168,13 @@ export default function CorrectionRequestModal({
             'Content-Type': 'application/json',
             'X-USER-ID': String(userId),
           },
-          body: JSON.stringify({
+          // apiFetch가 JSON stringify를 수행하므로 객체 그대로 전달
+          body: {
             type,
             proposedCheckInAt,
             proposedCheckOutAt,
             reason: reason.trim(),
-          }),
+          },
         }
       );
 
