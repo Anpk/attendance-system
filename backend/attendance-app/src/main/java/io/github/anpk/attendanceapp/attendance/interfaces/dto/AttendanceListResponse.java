@@ -7,4 +7,5 @@ public record AttendanceListResponse(
         int page,
         int size,
         long totalElements
+
 ) {}

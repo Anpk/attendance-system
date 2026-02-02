@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class AttendanceService {
@@ -97,26 +98,6 @@ public class AttendanceService {
 
         var saved = attendanceRepository.save(attendance);
         return AttendanceActionResponse.from(saved);
-    }
-
-    @Transactional(readOnly = true)
-    public AttendanceActionResponse getToday(Long userId) {
-        LocalDate today = LocalDate.now();
-
-        return attendanceRepository.findByUserIdAndWorkDate(userId, today)
-                .map(AttendanceActionResponse::from)
-                .orElse(new AttendanceActionResponse(
-                        null,
-                        today.toString(),
-                        null,
-                        null,
-                        false)
-                );
-    }
-
-    @Transactional(readOnly = true)
-    public List<Attendance> findByWorkDate(LocalDate date) {
-        return attendanceRepository.findByWorkDate(date);
     }
 
     private static void validateCheckInPhoto(MultipartFile photo) {
@@ -197,6 +178,20 @@ public class AttendanceService {
         // 아래는 "기간 조회" 메서드가 있다고 가정합니다.
         List<Attendance> items = attendanceRepository.findAllByUserIdAndWorkDateBetweenOrderByWorkDateAsc(userId, from, to);
 
+        // 월별 목록 표시/중복 요청 방지를 위해 "내 PENDING 정정 요청 존재"를 attendanceId 단위로 합성
+        // 람다에서 참조하므로 재할당 없이 "한 번만" 초기화(= effectively final) 한다.
+        Set<Long> pendingAttendanceIds = items.isEmpty()
+                ? Set.of()
+                : correctionRequestRepository
+                .findByRequestedByAndStatusAndAttendance_IdIn(
+                        userId,
+                        CorrectionRequestStatus.PENDING,
+                        items.stream().map(Attendance::getId).toList()
+                )
+                .stream()
+                .map(cr -> cr.getAttendance().getId())
+                .collect(Collectors.toSet());
+
         List<AttendanceListItemResponse> mapped = items.stream()
                 .map(a -> {
                     FinalSnapshot snap = toFinalSnapshot(a);
@@ -205,13 +200,14 @@ public class AttendanceService {
                             a.getWorkDate().toString(),
                             snap.finalCheckInAt(),
                             snap.finalCheckOutAt(),
-                            snap.isCorrected()
+                            snap.isCorrected(),
+                            pendingAttendanceIds.contains(a.getId())
                     );
                 })
                 .toList();
 
         // page/size/totalElements는 "최소"로 고정값 처리 (프론트에서 필요 시 paging 확장)
-        return new AttendanceListResponse(mapped, 1, mapped.size(), mapped.size());
+        return new AttendanceListResponse(mapped, page, size, mapped.size());
     }
 
     @Transactional(readOnly = true)
@@ -278,19 +274,22 @@ public class AttendanceService {
                 .findFirstByAttendance_IdAndStatusOrderByProcessedAtDesc(a.getId(), CorrectionRequestStatus.APPROVED)
                 .orElse(null);
 
+                OffsetDateTime baseIn = (a.getCheckInTime() == null) ? null : a.getCheckInTime().atZone(KST).toOffsetDateTime();
+                OffsetDateTime baseOut = (a.getCheckOutTime() == null) ? null : a.getCheckOutTime().atZone(KST).toOffsetDateTime();
+
         if (approved == null) {
             return new FinalSnapshot(
                     a.getId(),
                     a.getWorkDate(),
-                    a.getCheckInTime().atZone(KST).toOffsetDateTime(),
-                    a.getCheckOutTime().atZone(KST).toOffsetDateTime(),
+                    baseIn,
+                    baseOut,
                     false,
                     null
             );
         }
 
-        OffsetDateTime finalCheckIn = approved.getProposedCheckInAt() != null ? approved.getProposedCheckInAt() : a.getCheckInTime().atZone(KST).toOffsetDateTime();
-        OffsetDateTime finalCheckOut = approved.getProposedCheckOutAt() != null ? approved.getProposedCheckOutAt() : a.getCheckOutTime().atZone(KST).toOffsetDateTime();
+        OffsetDateTime finalCheckIn = (approved.getProposedCheckInAt() != null) ? approved.getProposedCheckInAt() : baseIn;
+        OffsetDateTime finalCheckOut = (approved.getProposedCheckOutAt() != null) ? approved.getProposedCheckOutAt() : baseOut;
 
         return new FinalSnapshot(
                 a.getId(),
