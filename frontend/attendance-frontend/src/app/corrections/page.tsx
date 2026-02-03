@@ -1,13 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AppHeader from '@/app/_components/AppHeader';
-import CorrectionRequestDetailModal, {
-  type CorrectionRequestListItem,
-} from '@/app/_components/CorrectionRequestDetailModal';
+import type { CorrectionRequestListItem } from '@/app/_components/CorrectionRequestDetailModal';
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
 
@@ -18,20 +17,22 @@ type CorrectionRequestListResponse = {
   totalElements: number;
 };
 
-function fmtDate(iso?: string | null): string {
-  if (!iso) return '-';
-  try {
-    const d = new Date(iso);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-      d.getDate()
-    ).padStart(2, '0')}`;
-  } catch {
-    return iso;
-  }
-}
-
 export default function CorrectionsPage() {
   const { user } = useAuth();
+
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // tab=my | approvable (기본 my)
+  const tab = searchParams.get('tab') === 'approvable' ? 'approvable' : 'my';
+
+  // ✅ 승인자만 승인 대기 탭 노출 (프론트 가드)
+  // - role 기반이 있으면 즉시 판정
+  // - role이 없거나 신뢰할 수 없으면, approvable API를 1회 호출해 권한을 판정(403이면 비승인자)
+  const roleBasedApprover = user?.role === 'MANAGER' || user?.role === 'ADMIN';
+  const [canApprove, setCanApprove] = useState<boolean | null>(null);
+
+  const isApprover = roleBasedApprover || canApprove === true;
 
   const baseUrl = useMemo(() => {
     // 기존 정책 유지(최소 diff): env 없으면 localhost fallback
@@ -42,20 +43,22 @@ export default function CorrectionsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [selected, setSelected] = useState<CorrectionRequestListItem | null>(
-    null
-  );
-
   const fetchList = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     setError('');
     try {
-      // 계약: GET /api/correction-requests?scope=requested_by_me
-      const data = await apiFetch<CorrectionRequestListResponse>(
-        `${baseUrl}/api/correction-requests?scope=requested_by_me&page=0&size=50`,
-        { headers: { 'X-USER-ID': String(user.userId) } }
-      );
+      // 계약: 탭에 따라 scope 변경
+      // - 내 정정 요청: scope=requested_by_me
+      // - 정정 승인 대기: scope=approvable&status=PENDING
+      const url =
+        tab === 'my'
+          ? `${baseUrl}/api/correction-requests?scope=requested_by_me&page=0&size=50`
+          : `${baseUrl}/api/correction-requests?scope=approvable&status=PENDING&page=0&size=50`;
+
+      const data = await apiFetch<CorrectionRequestListResponse>(url, {
+        headers: { 'X-USER-ID': String(user.userId) },
+      });
       setItems(data.items ?? []);
     } catch (e) {
       setItems([]);
@@ -63,12 +66,55 @@ export default function CorrectionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, baseUrl]);
+  }, [user, baseUrl, tab]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // role 기반 판정이 가능하면 네트워크 호출 없이 확정
+    if (roleBasedApprover) {
+      setCanApprove(true);
+      return;
+    }
+
+    // 이미 판정이 끝났으면 재호출하지 않음
+    if (canApprove !== null) return;
+
+    // ✅ 최소 호출: 승인 대기 조회를 size=1로 요청해 200/403로 권한 판정
+    (async () => {
+      try {
+        await apiFetch<CorrectionRequestListResponse>(
+          `${baseUrl}/api/correction-requests?scope=approvable&status=PENDING&page=0&size=1`,
+          { headers: { 'X-USER-ID': String(user.userId) } }
+        );
+        setCanApprove(true);
+      } catch {
+        // 403(FORBIDDEN) 포함 어떤 실패든 "승인 불가"로 처리(안전)
+        setCanApprove(false);
+      }
+    })();
+  }, [user, baseUrl, roleBasedApprover, canApprove]);
 
   useEffect(() => {
     if (!user) return;
     fetchList();
   }, [user, fetchList]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // ✅ 권한 판정이 "명확히 false"인데 approvable 탭으로 접근하면 my 탭으로 되돌림
+    // - 판정 전(null)에는 섣불리 redirect 하지 않음
+    if (canApprove === false && tab === 'approvable') {
+      router.replace('/corrections?tab=my');
+    }
+  }, [user, canApprove, tab, router]);
+
+  function switchTab(next: 'my' | 'approvable') {
+    // URL로 탭 상태 유지(뒤로가기 UX 포함)
+    const q = next === 'approvable' ? '?tab=approvable' : '?tab=my';
+    router.replace(`/corrections${q}`);
+  }
 
   return (
     <div className="min-h-screen">
@@ -76,7 +122,7 @@ export default function CorrectionsPage() {
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold">정정 요청함</h1>
+          <h1 className="text-2xl font-bold">정정</h1>
           <button
             type="button"
             onClick={fetchList}
@@ -86,6 +132,33 @@ export default function CorrectionsPage() {
           >
             {loading ? '갱신 중...' : '새로고침'}
           </button>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={() => switchTab('my')}
+            className={`rounded px-3 py-2 text-sm ${
+              tab === 'my' ? 'bg-black text-white' : 'bg-gray-100 text-gray-800'
+            }`}
+            disabled={loading}
+          >
+            내 정정 요청
+          </button>
+          {isApprover && (
+            <button
+              type="button"
+              onClick={() => switchTab('approvable')}
+              className={`rounded px-3 py-2 text-sm ${
+                tab === 'approvable'
+                  ? 'bg-black text-white'
+                  : 'bg-gray-100 text-gray-800'
+              }`}
+              disabled={loading}
+            >
+              정정 승인 대기
+            </button>
+          )}
         </div>
 
         {loading && (
@@ -100,7 +173,9 @@ export default function CorrectionsPage() {
 
         {!loading && !error && items.length === 0 && (
           <p className="mt-4 text-sm text-gray-600">
-            표시할 정정 요청이 없습니다.
+            {tab === 'my'
+              ? '표시할 정정 요청이 없습니다.'
+              : '승인 대기 요청이 없습니다.'}
           </p>
         )}
 
@@ -110,15 +185,24 @@ export default function CorrectionsPage() {
               {items.map((it) => (
                 <li key={it.requestId} className="px-4 py-3 text-sm">
                   <Link
-                    href={`/corrections/${it.requestId}`}
+                    href={
+                      tab === 'approvable'
+                        ? `/corrections/${it.requestId}?scope=approvable`
+                        : `/corrections/${it.requestId}`
+                    }
                     className="block w-full"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="font-medium">
-                          근태 #{it.attendanceId}
+                          요청 #{it.requestId}
                         </span>
-                        <span className="text-gray-600">상태 {it.status}</span>
+                        <span className="text-gray-600">
+                          상태 {it.status}
+                          {tab === 'approvable'
+                            ? ` · 요청자 ${it.requestedBy}`
+                            : ''}
+                        </span>
                       </div>
                       <span className="text-xs text-gray-500">상세 보기</span>
                     </div>
@@ -129,16 +213,6 @@ export default function CorrectionsPage() {
           </section>
         )}
       </main>
-
-      {selected && user && (
-        <CorrectionRequestDetailModal
-          baseUrl={baseUrl}
-          userId={user.userId}
-          item={selected}
-          onClose={() => setSelected(null)}
-          onCanceled={fetchList}
-        />
-      )}
     </div>
   );
 }

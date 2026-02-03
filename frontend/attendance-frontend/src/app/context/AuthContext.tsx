@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 
 type User = {
   userId: number;
-  role: 'EMPLOYEE' | 'ADMIN';
+  role: 'EMPLOYEE' | 'MANAGER' | 'ADMIN';
 };
 
 type AuthContextType = {

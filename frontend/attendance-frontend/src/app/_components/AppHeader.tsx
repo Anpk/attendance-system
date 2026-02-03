@@ -31,7 +31,7 @@ export default function AppHeader() {
             href="/corrections"
             className="rounded px-2 py-1 hover:bg-gray-100"
           >
-            정정 요청함
+            정정
           </Link>
         </nav>
       </div>
