@@ -156,9 +156,8 @@ public class CorrectionRequestService {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
             }
 
-            CorrectionRequestStatus st = (status == null || status.isBlank())
-                    ? CorrectionRequestStatus.PENDING
-                    : parseStatus(status);
+            // 승인 대기함(scope=approvable)은 의미상 PENDING만 노출(클라이언트 status 파라미터는 무시)
+            CorrectionRequestStatus st = CorrectionRequestStatus.PENDING;
 
             var result = (approver.getRole() == EmployeeRole.ADMIN)
                     ? correctionRequestRepository.findByStatus(st, pageable)
@@ -172,8 +171,8 @@ public class CorrectionRequestService {
                             r.getType(),
                             r.getRequestedBy(),
                             r.getRequestedAt(),
-                            r.getProposedCheckOutAt(),
                             r.getProposedCheckInAt(),
+                            r.getProposedCheckOutAt(),
                             r.getReason()
                     ))
                     .toList();

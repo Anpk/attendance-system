@@ -87,17 +87,27 @@ function normalizeProposedTimes(
   let inAt: string | null = d.proposedCheckInAt ?? null;
   let outAt: string | null = d.proposedCheckOutAt ?? null;
 
-  // ✅ 단일 유형일 때(출근/퇴근) 백엔드 필드가 한 쪽만 채워지거나 반대로 들어오는 경우를 방어
+  // ✅ 단일 유형일 때(출근/퇴근)
+  // - (1) 뒤집혀 들어온 경우: 반대쪽 값이 들어오면 올바른 필드로 이동
+  // - (2) 둘 다 들어온 경우: 단일 유형에서는 반대쪽 값은 표시 혼동을 유발하므로 제거
   if (d.type === 'CHECK_IN') {
     if (!inAt && outAt) {
+      // 뒤집힘: out → in 으로 이동
       inAt = outAt;
+      outAt = null;
+    } else {
+      // CHECK_IN이면 outAt은 의미 없으므로 제거(표시 혼동 방지)
       outAt = null;
     }
   }
 
   if (d.type === 'CHECK_OUT') {
     if (!outAt && inAt) {
+      // 뒤집힘: in → out 으로 이동
       outAt = inAt;
+      inAt = null;
+    } else {
+      // CHECK_OUT이면 inAt은 의미 없으므로 제거(표시 혼동 방지)
       inAt = null;
     }
   }
