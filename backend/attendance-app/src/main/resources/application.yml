@@ -11,7 +11,7 @@ server:
 spring:
 
   application:
-    name: attandence-app
+    name: attendance-app
 
   devtools:
     livereload:
@@ -35,6 +35,11 @@ spring:
       enabled: true
       path: /h2-console
 
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:data-dev.sql
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -43,3 +48,8 @@ spring:
       hibernate:
         format_sql: true
     defer-datasource-initialization: true
+
+logging:
+  level:
+    org.springframework.boot.sql.init: DEBUG
+    org.springframework.jdbc.datasource.init: DEBUG

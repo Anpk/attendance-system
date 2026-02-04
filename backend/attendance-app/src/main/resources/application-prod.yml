@@ -38,6 +38,11 @@ spring:
       enabled: true
       path: /h2-console
 
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:data-dev.sql
+
   jpa:
     hibernate:
       ddl-auto: update
