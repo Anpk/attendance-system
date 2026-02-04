@@ -27,12 +27,8 @@ export default function CorrectionsPage() {
   const tab = searchParams.get('tab') === 'approvable' ? 'approvable' : 'my';
 
   // ✅ 승인자만 승인 대기 탭 노출 (프론트 가드)
-  // - role 기반이 있으면 즉시 판정
-  // - role이 없거나 신뢰할 수 없으면, approvable API를 1회 호출해 권한을 판정(403이면 비승인자)
-  const roleBasedApprover = user?.role === 'MANAGER' || user?.role === 'ADMIN';
-  const [canApprove, setCanApprove] = useState<boolean | null>(null);
-
-  const isApprover = roleBasedApprover || canApprove === true;
+  // - role 기반만 사용 (최소/명확): MANAGER/ADMIN만 approvable 탭 접근 가능
+  const isApprover = user?.role === 'MANAGER' || user?.role === 'ADMIN';
 
   const baseUrl = useMemo(() => {
     // 기존 정책 유지(최소 diff): env 없으면 localhost fallback
@@ -45,6 +41,14 @@ export default function CorrectionsPage() {
 
   const fetchList = useCallback(async () => {
     if (!user) return;
+
+    // ✅ 직원이 approvable scope를 호출하지 않도록 차단
+    // - URL이 approvable로 들어와도(직접 입력/즐겨찾기 등) API 호출 전에 my로 강제
+    const effectiveTab: 'my' | 'approvable' = !isApprover ? 'my' : tab;
+    if (tab === 'approvable' && !isApprover) {
+      router.replace('/corrections?tab=my');
+    }
+
     setLoading(true);
     setError('');
     try {
@@ -52,7 +56,7 @@ export default function CorrectionsPage() {
       // - 내 정정 요청: scope=requested_by_me
       // - 정정 승인 대기: scope=approvable&status=PENDING
       const url =
-        tab === 'my'
+        effectiveTab === 'my'
           ? `${baseUrl}/api/correction-requests?scope=requested_by_me&page=0&size=50`
           : `${baseUrl}/api/correction-requests?scope=approvable&status=PENDING&page=0&size=50`;
 
@@ -66,34 +70,7 @@ export default function CorrectionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, baseUrl, tab]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    // role 기반 판정이 가능하면 네트워크 호출 없이 확정
-    if (roleBasedApprover) {
-      setCanApprove(true);
-      return;
-    }
-
-    // 이미 판정이 끝났으면 재호출하지 않음
-    if (canApprove !== null) return;
-
-    // ✅ 최소 호출: 승인 대기 조회를 size=1로 요청해 200/403로 권한 판정
-    (async () => {
-      try {
-        await apiFetch<CorrectionRequestListResponse>(
-          `${baseUrl}/api/correction-requests?scope=approvable&status=PENDING&page=0&size=1`,
-          { headers: { 'X-USER-ID': String(user.userId) } }
-        );
-        setCanApprove(true);
-      } catch {
-        // 403(FORBIDDEN) 포함 어떤 실패든 "승인 불가"로 처리(안전)
-        setCanApprove(false);
-      }
-    })();
-  }, [user, baseUrl, roleBasedApprover, canApprove]);
+  }, [user, baseUrl, tab, isApprover, router]);
 
   useEffect(() => {
     if (!user) return;
@@ -103,12 +80,11 @@ export default function CorrectionsPage() {
   useEffect(() => {
     if (!user) return;
 
-    // ✅ 권한 판정이 "명확히 false"인데 approvable 탭으로 접근하면 my 탭으로 되돌림
-    // - 판정 전(null)에는 섣불리 redirect 하지 않음
-    if (canApprove === false && tab === 'approvable') {
+    // ✅ 비승인자가 URL로 approvable 탭에 직접 접근하면 my 탭으로 되돌림
+    if (!isApprover && tab === 'approvable') {
       router.replace('/corrections?tab=my');
     }
-  }, [user, canApprove, tab, router]);
+  }, [user, isApprover, tab, router]);
 
   function switchTab(next: 'my' | 'approvable') {
     // URL로 탭 상태 유지(뒤로가기 UX 포함)
