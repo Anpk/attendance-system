@@ -8,7 +8,44 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppHeader from '@/app/_components/AppHeader';
 import type { CorrectionRequestListItem } from '@/app/_components/CorrectionRequestDetailModal';
 import { apiFetch } from '@/lib/api/client';
+
 import { toUserMessage } from '@/lib/api/error-messages';
+
+function badgeClass(status: string): string {
+  switch (status) {
+    case 'PENDING':
+      return 'bg-blue-100 text-blue-800';
+    case 'APPROVED':
+      return 'bg-green-100 text-green-800';
+    case 'REJECTED':
+      return 'bg-red-100 text-red-800';
+    case 'CANCELED':
+      return 'bg-gray-100 text-gray-700';
+    default:
+      return 'bg-gray-100 text-gray-700';
+  }
+}
+
+function fmtYmdHm(iso?: string | null): string {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  } catch {
+    return iso;
+  }
+}
+
+function getOptionalStringField(obj: unknown, key: string): string | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const v = (obj as Record<string, unknown>)[key];
+  return typeof v === 'string' && v.trim().length > 0 ? v : null;
+}
 
 type CorrectionRequestListResponse = {
   items: CorrectionRequestListItem[];
@@ -16,6 +53,14 @@ type CorrectionRequestListResponse = {
   size: number;
   totalElements: number;
 };
+
+type StatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED';
+
+function toEpochMillis(iso: string | null, fallback: number): number {
+  if (!iso) return fallback;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) ? t : fallback;
+}
 
 export default function CorrectionsPage() {
   const { user } = useAuth();
@@ -38,6 +83,7 @@ export default function CorrectionsPage() {
   const [items, setItems] = useState<CorrectionRequestListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
 
   const fetchList = useCallback(async () => {
     if (!user) return;
@@ -88,9 +134,30 @@ export default function CorrectionsPage() {
 
   function switchTab(next: 'my' | 'approvable') {
     // URL로 탭 상태 유지(뒤로가기 UX 포함)
+    setStatusFilter('ALL');
     const q = next === 'approvable' ? '?tab=approvable' : '?tab=my';
     router.replace(`/corrections${q}`);
   }
+
+  const displayedItems = useMemo(() => {
+    // ✅ 목록 UX 보강(최소): 상태 필터 + 요청시각 내림차순 정렬
+    // - 서버 정렬/필터가 아직 없다면 클라이언트에서 1차 대응
+    const filtered =
+      tab === 'my' && statusFilter !== 'ALL'
+        ? items.filter((it) => String(it.status) === statusFilter)
+        : items;
+
+    // requestedAt이 없을 수 있으므로 requestId로 fallback(내림차순)
+    return [...filtered].sort((a, b) => {
+      const aRequestedAt = getOptionalStringField(a, 'requestedAt');
+      const bRequestedAt = getOptionalStringField(b, 'requestedAt');
+
+      const aKey = toEpochMillis(aRequestedAt, Number(a.requestId) || 0);
+      const bKey = toEpochMillis(bRequestedAt, Number(b.requestId) || 0);
+
+      return bKey - aKey;
+    });
+  }, [items, tab, statusFilter]);
 
   return (
     <div className="min-h-screen">
@@ -136,6 +203,33 @@ export default function CorrectionsPage() {
             </button>
           )}
         </div>
+        {tab === 'my' && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(
+              [
+                ['ALL', '전체'],
+                ['PENDING', '대기'],
+                ['APPROVED', '승인'],
+                ['REJECTED', '반려'],
+                ['CANCELED', '취소'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStatusFilter(value)}
+                className={`rounded px-3 py-2 text-xs ${
+                  statusFilter === value
+                    ? 'bg-black text-white'
+                    : 'bg-gray-100 text-gray-800'
+                }`}
+                disabled={loading}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {loading && (
           <p className="mt-4 text-sm text-gray-600" aria-busy="true">
@@ -147,7 +241,7 @@ export default function CorrectionsPage() {
           <p className="mt-4 text-sm text-red-600">❌ {error}</p>
         )}
 
-        {!loading && !error && items.length === 0 && (
+        {!loading && !error && displayedItems.length === 0 && (
           <p className="mt-4 text-sm text-gray-600">
             {tab === 'my'
               ? '표시할 정정 요청이 없습니다.'
@@ -155,36 +249,60 @@ export default function CorrectionsPage() {
           </p>
         )}
 
-        {!loading && !error && items.length > 0 && (
+        {!loading && !error && displayedItems.length > 0 && (
           <section className="mt-4 rounded border">
             <ul className="divide-y">
-              {items.map((it) => (
-                <li key={it.requestId} className="px-4 py-3 text-sm">
-                  <Link
-                    href={
-                      tab === 'approvable'
-                        ? `/corrections/${it.requestId}?scope=approvable`
-                        : `/corrections/${it.requestId}`
-                    }
-                    className="block w-full"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col">
-                        <span className="font-medium">
-                          요청 #{it.requestId}
-                        </span>
-                        <span className="text-gray-600">
-                          상태 {it.status}
-                          {tab === 'approvable'
-                            ? ` · 요청자 ${it.requestedBy}`
-                            : ''}
-                        </span>
+              {displayedItems.map((it) => {
+                const requestedAt = getOptionalStringField(it, 'requestedAt');
+                const workDate = getOptionalStringField(it, 'workDate');
+
+                return (
+                  <li key={it.requestId} className="px-4 py-3 text-sm">
+                    <Link
+                      href={
+                        tab === 'approvable'
+                          ? `/corrections/${it.requestId}?tab=approvable`
+                          : `/corrections/${it.requestId}?tab=my`
+                      }
+                      className="block w-full"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-medium">
+                              요청 #{it.requestId}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {fmtYmdHm(requestedAt)}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 text-gray-600">
+                            <span
+                              className={`rounded px-2 py-1 text-xs ${badgeClass(String(it.status))}`}
+                            >
+                              {it.status}
+                            </span>
+
+                            {workDate ? (
+                              <span className="text-xs text-gray-600">
+                                대상 {workDate}
+                              </span>
+                            ) : null}
+
+                            {tab === 'approvable' ? (
+                              <span className="text-xs text-gray-600">
+                                요청자 {it.requestedBy}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-500">상세 보기</span>
                       </div>
-                      <span className="text-xs text-gray-500">상세 보기</span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}
