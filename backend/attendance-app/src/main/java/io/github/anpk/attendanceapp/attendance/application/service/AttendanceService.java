@@ -54,7 +54,7 @@ public class AttendanceService {
 
     @Transactional
     public AttendanceActionResponse checkIn(Long userId, MultipartFile photo) throws IOException {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(KST);
 
         // 계약: 체크인은 사진 업로드 필수 + 이미지/크기 제한
         validateCheckInPhoto(photo);
@@ -85,7 +85,7 @@ public class AttendanceService {
 
     @Transactional
     public AttendanceActionResponse checkOut(Long userId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(KST);
 
         var attendance = attendanceRepository.findByUserIdAndWorkDate(userId, today)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_CHECKED_IN, "출근 기록이 없어 퇴근할 수 없습니다."));
@@ -270,12 +270,20 @@ public class AttendanceService {
      * - PENDING/REJECTED/CANCELED 는 반영 금지
      */
     private FinalSnapshot toFinalSnapshot(Attendance a) {
+        // ✅ 승인된 정정 중 최신 1건만 반영
+        // - Repository 계약: processedAt desc (현재 엔티티 필드와 정합)
         CorrectionRequest approved = correctionRequestRepository
                 .findFirstByAttendance_IdAndStatusOrderByProcessedAtDesc(a.getId(), CorrectionRequestStatus.APPROVED)
                 .orElse(null);
 
-                OffsetDateTime baseIn = (a.getCheckInTime() == null) ? null : a.getCheckInTime().atZone(KST).toOffsetDateTime();
-                OffsetDateTime baseOut = (a.getCheckOutTime() == null) ? null : a.getCheckOutTime().atZone(KST).toOffsetDateTime();
+        // Attendance 원본 시간(null 가능) → KST OffsetDateTime으로 변환
+        OffsetDateTime baseIn = (a.getCheckInTime() == null)
+                ? null
+                : a.getCheckInTime().atZone(KST).toOffsetDateTime();
+
+        OffsetDateTime baseOut = (a.getCheckOutTime() == null)
+                ? null
+                : a.getCheckOutTime().atZone(KST).toOffsetDateTime();
 
         if (approved == null) {
             return new FinalSnapshot(
@@ -288,8 +296,13 @@ public class AttendanceService {
             );
         }
 
-        OffsetDateTime finalCheckIn = (approved.getProposedCheckInAt() != null) ? approved.getProposedCheckInAt() : baseIn;
-        OffsetDateTime finalCheckOut = (approved.getProposedCheckOutAt() != null) ? approved.getProposedCheckOutAt() : baseOut;
+        OffsetDateTime finalCheckIn = (approved.getProposedCheckInAt() != null)
+                ? approved.getProposedCheckInAt()
+                : baseIn;
+
+        OffsetDateTime finalCheckOut = (approved.getProposedCheckOutAt() != null)
+                ? approved.getProposedCheckOutAt()
+                : baseOut;
 
         return new FinalSnapshot(
                 a.getId(),
