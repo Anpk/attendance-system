@@ -270,11 +270,13 @@ public class AttendanceService {
      * - PENDING/REJECTED/CANCELED 는 반영 금지
      */
     private FinalSnapshot toFinalSnapshot(Attendance a) {
+        // ✅ 승인된 정정 중 최신 1건만 반영
         // - Repository 계약: processedAt desc (현재 엔티티 필드와 정합)
         CorrectionRequest approved = correctionRequestRepository
                 .findFirstByAttendance_IdAndStatusOrderByProcessedAtDesc(a.getId(), CorrectionRequestStatus.APPROVED)
                 .orElse(null);
 
+        // Attendance 원본 시간(null 가능) → KST OffsetDateTime으로 변환
         OffsetDateTime baseIn = (a.getCheckInTime() == null)
                 ? null
                 : a.getCheckInTime().atZone(KST).toOffsetDateTime();
