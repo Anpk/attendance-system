@@ -143,6 +143,25 @@ function getIsoField(
   return null;
 }
 
+function getNestedObj(
+  obj: Record<string, unknown>,
+  key: string
+): Record<string, unknown> | null {
+  const v = obj[key];
+  if (!v || typeof v !== 'object') return null;
+  return v as Record<string, unknown>;
+}
+
+function getIsoFieldFromNested(
+  obj: Record<string, unknown>,
+  nestedKey: string,
+  keys: string[]
+): string | null {
+  const nested = getNestedObj(obj, nestedKey);
+  if (!nested) return null;
+  return getIsoField(nested, keys);
+}
+
 function applyCompatLayer(d: CorrectionRequestDetail): CorrectionRequestDetail {
   const obj = d as unknown as Record<string, unknown>;
 
@@ -178,11 +197,29 @@ function applyCompatLayer(d: CorrectionRequestDetail): CorrectionRequestDetail {
       'baseCheckInAt',
       'checkInAt',
       'attendanceCheckInAt',
+    ]) ??
+    // 일부 응답은 attendance 객체 하위로 내려올 수 있음
+    getIsoFieldFromNested(obj, 'attendance', [
+      'currentCheckInAt',
+      'finalCheckInAt',
+      'beforeCheckInAt',
+      'baseCheckInAt',
+      'checkInAt',
+      'attendanceCheckInAt',
     ]);
 
   const currentOut =
     d.currentCheckOutAt ??
     getIsoField(obj, [
+      'currentCheckOutAt',
+      'finalCheckOutAt',
+      'beforeCheckOutAt',
+      'baseCheckOutAt',
+      'checkOutAt',
+      'attendanceCheckOutAt',
+    ]) ??
+    // 일부 응답은 attendance 객체 하위로 내려올 수 있음
+    getIsoFieldFromNested(obj, 'attendance', [
       'currentCheckOutAt',
       'finalCheckOutAt',
       'beforeCheckOutAt',
@@ -197,11 +234,23 @@ function applyCompatLayer(d: CorrectionRequestDetail): CorrectionRequestDetail {
       'originalCheckInAt',
       'original_check_in_at',
       'originCheckInAt',
+    ]) ??
+    // 일부 응답은 attendance 객체 하위로 내려올 수 있음
+    getIsoFieldFromNested(obj, 'attendance', [
+      'originalCheckInAt',
+      'original_check_in_at',
+      'originCheckInAt',
     ]);
 
   const originalOut =
     d.originalCheckOutAt ??
     getIsoField(obj, [
+      'originalCheckOutAt',
+      'original_check_out_at',
+      'originCheckOutAt',
+    ]) ??
+    // 일부 응답은 attendance 객체 하위로 내려올 수 있음
+    getIsoFieldFromNested(obj, 'attendance', [
       'originalCheckOutAt',
       'original_check_out_at',
       'originCheckOutAt',
@@ -224,7 +273,7 @@ export default function CorrectionDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const scope = (searchParams.get('scope') ?? '').trim();
+  const tab = searchParams.get('tab') === 'approvable' ? 'approvable' : 'my';
 
   const baseUrl = useMemo(() => {
     return process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
@@ -233,9 +282,8 @@ export default function CorrectionDetailPage() {
   const requestId = Number(params.id);
 
   // ✅ 목록 복귀 시 탭 유지(최소 UX)
-  // - 승인 대기 탭에서 들어오면 scope=approvable
   const backToListUrl =
-    scope === 'approvable'
+    tab === 'approvable'
       ? '/corrections?tab=approvable'
       : '/corrections?tab=my';
 
@@ -267,32 +315,59 @@ export default function CorrectionDetailPage() {
     setError('');
     try {
       // 계약 기준: 상세 GET은 없음 → 목록 API로 가져온 뒤 requestId로 필터링
-      // 단, 상세 진입이 "내 요청"인지 "승인 대기"인지에 따라 scope가 달라질 수 있으므로
-      // (1) URL 파라미터 scope 우선, (2) requested_by_me, (3) approvable(승인자) 순으로 탐색한다.
-      const scopeParam = (searchParams.get('scope') ?? '').trim();
-      const candidates = [
-        scopeParam,
-        'requested_by_me',
-        isApprover ? 'approvable' : '',
-        user?.role === 'ADMIN' ? 'all' : '',
-      ].filter((x) => !!x);
+      // ✅ 최소 호출 정책(루프 최소화)
+      // - 기본 1회 + 필요 시 fallback 1회만 시도
+      // - approvable 컨텍스트면 status=PENDING을 함께 사용(계약)
 
-      // 중복 제거
-      const scopes = Array.from(new Set(candidates));
+      // URL에 scope가 붙어올 수 있으나, 신뢰할 수 없는 값이거나(직접 입력)
+      // 권한이 없는 사용자가 approvable로 들어올 수 있으므로 최소 검증만 수행한다.
+      const primaryScope: 'requested_by_me' | 'approvable' =
+        tab === 'approvable' ? 'approvable' : 'requested_by_me';
+
+      const buildListUrl = (s: 'requested_by_me' | 'approvable') => {
+        const base = `${baseUrl}/api/correction-requests?scope=${encodeURIComponent(s)}&page=0&size=200`;
+        return s === 'approvable' ? `${base}&status=PENDING` : base;
+      };
+
+      const tryFindOnce = async (s: 'requested_by_me' | 'approvable') => {
+        const res = await apiFetch<CorrectionRequestListResponse>(
+          buildListUrl(s),
+          {
+            headers: { 'X-USER-ID': String(user.userId) },
+          }
+        );
+        return (res.items ?? []).find((x) => x.requestId === requestId) ?? null;
+      };
 
       let found: CorrectionRequestDetail | null = null;
 
-      for (const s of scopes) {
-        const res = await apiFetch<CorrectionRequestListResponse>(
-          `${baseUrl}/api/correction-requests?scope=${encodeURIComponent(
-            s
-          )}&page=0&size=200`,
-          { headers: { 'X-USER-ID': String(user.userId) } }
-        );
+      // 1) primary 시도
+      try {
+        // approvable은 승인자만 접근 가능하므로, 승인자가 아니라면 바로 my로 우회
+        if (primaryScope === 'approvable' && !isApprover) {
+          found = await tryFindOnce('requested_by_me');
+        } else {
+          found = await tryFindOnce(primaryScope);
+        }
+      } catch (e) {
+        // primary 실패 시 fallback 시도(아래에서 처리)
+      }
 
-        found =
-          (res.items ?? []).find((x) => x.requestId === requestId) ?? null;
-        if (found) break;
+      // 2) fallback 1회
+      if (!found) {
+        const fallbackScope: 'requested_by_me' | 'approvable' =
+          primaryScope === 'approvable' ? 'requested_by_me' : 'approvable';
+
+        // approvable fallback은 승인자만 시도(불필요한 403/네트워크 낭비 방지)
+        if (fallbackScope === 'approvable' && !isApprover) {
+          // skip
+        } else {
+          try {
+            found = await tryFindOnce(fallbackScope);
+          } catch {
+            // fallback 실패는 그대로 not found로 처리
+          }
+        }
       }
 
       if (!found) {
@@ -346,7 +421,7 @@ export default function CorrectionDetailPage() {
     setBusy('cancel');
     setError('');
     try {
-      // ✅ 기존 합의/구현에 맞춤: POST /api/correction-requests/{id}/cancel
+      // 처리 후에는 진입 탭 컨텍스트를 유지한 채 목록으로 복귀
       await apiFetch(`${baseUrl}/api/correction-requests/${requestId}/cancel`, {
         method: 'POST',
         headers: { 'X-USER-ID': String(user.userId) },
@@ -367,8 +442,7 @@ export default function CorrectionDetailPage() {
     setBusy('approve');
     setError('');
     try {
-      // 계약: POST /api/correction-requests/{id}/approve
-      // 코멘트는 선택(백엔드가 미사용이어도 {}로 안전하게 전송)
+      // 처리 후에는 진입 탭 컨텍스트를 유지한 채 목록으로 복귀
       await apiFetch(
         `${baseUrl}/api/correction-requests/${requestId}/approve`,
         {
@@ -402,15 +476,15 @@ export default function CorrectionDetailPage() {
     setBusy('reject');
     setError('');
     try {
-      // 계약: POST /api/correction-requests/{id}/reject
+      // 처리 후에는 진입 탭 컨텍스트를 유지한 채 목록으로 복귀
       await apiFetch(`${baseUrl}/api/correction-requests/${requestId}/reject`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-USER-ID': String(user.userId),
         },
-        // apiFetch에서 JSON 직렬화를 처리하므로 객체 그대로 전달(중복 stringify 방지)
-        body: { rejectReason: reason },
+        // 계약: 반려 사유 필드명은 reason
+        body: { reason },
       });
       router.push(backToListUrl);
     } catch (e) {
@@ -426,11 +500,7 @@ export default function CorrectionDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, requestId, baseUrl]);
 
-  const showCancel =
-    !!data &&
-    data.status === 'PENDING' &&
-    scope !== 'approvable' &&
-    !isApprover;
+  const showCancel = !!data && data.status === 'PENDING' && !isApprover;
   const showApproveReject = !!data && data.status === 'PENDING' && isApprover;
 
   return (
@@ -447,6 +517,11 @@ export default function CorrectionDetailPage() {
           >
             목록
           </button>
+          <span className="text-xs text-gray-500">
+            {tab === 'approvable'
+              ? '승인 대기 탭에서 진입'
+              : '내 정정 요청 탭에서 진입'}
+          </span>
         </div>
 
         {loading && (
@@ -482,67 +557,71 @@ export default function CorrectionDetailPage() {
                 <div>근태 ID: {data.attendanceId}</div>
                 <div>유형: {data.type}</div>
 
-                {/* ✅ 제안 전(원본/현재) 시간 표시 */}
-                {data.currentCheckInAt ||
-                data.currentCheckOutAt ||
-                data.originalCheckInAt ||
-                data.originalCheckOutAt ? (
-                  <div className="mt-2 rounded bg-gray-50 p-3">
-                    <div className="text-xs font-medium text-gray-700">
-                      제안 전
-                    </div>
-                    <div className="mt-1 text-xs text-gray-600">
-                      {(() => {
-                        const inAt =
-                          data.currentCheckInAt ??
-                          data.originalCheckInAt ??
-                          null;
-                        const outAt =
-                          data.currentCheckOutAt ??
-                          data.originalCheckOutAt ??
-                          null;
-                        const targetDate = fmtDate(
-                          inAt ?? outAt ?? data.requestedAt
-                        );
+                {/* ✅ 원본(현재) vs 제안 비교 */}
+                {(() => {
+                  const baseIn =
+                    data.currentCheckInAt ?? data.originalCheckInAt ?? null;
+                  const baseOut =
+                    data.currentCheckOutAt ?? data.originalCheckOutAt ?? null;
+                  const propIn = data.proposedCheckInAt ?? null;
+                  const propOut = data.proposedCheckOutAt ?? null;
 
-                        return (
-                          <div className="flex flex-col gap-1">
-                            <div>대상 날짜: {targetDate}</div>
-                            {inAt ? <div>출근: {fmtHm(inAt)}</div> : null}
-                            {outAt ? <div>퇴근: {fmtHm(outAt)}</div> : null}
+                  const targetDate = fmtDate(
+                    propIn ?? propOut ?? baseIn ?? baseOut ?? data.requestedAt
+                  );
+
+                  const summaryParts: string[] = [];
+                  if (propIn && baseIn && fmtHm(propIn) !== fmtHm(baseIn)) {
+                    summaryParts.push(
+                      `출근 ${fmtHm(baseIn)} → ${fmtHm(propIn)}`
+                    );
+                  }
+                  if (propOut && baseOut && fmtHm(propOut) !== fmtHm(baseOut)) {
+                    summaryParts.push(
+                      `퇴근 ${fmtHm(baseOut)} → ${fmtHm(propOut)}`
+                    );
+                  }
+
+                  return (
+                    <div className="mt-2">
+                      <div className="text-xs text-gray-600">
+                        대상 날짜: {targetDate}
+                      </div>
+                      {summaryParts.length > 0 ? (
+                        <div className="mt-1 text-xs text-gray-600">
+                          변경 요약: {summaryParts.join(' · ')}
+                        </div>
+                      ) : null}
+
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        <div className="rounded border bg-gray-50 p-3">
+                          <div className="text-xs font-medium text-gray-700">
+                            제안 전
                           </div>
-                        );
-                      })()}
+                          <div className="mt-2 text-xs text-gray-700">
+                            <div>출근: {baseIn ? fmtHm(baseIn) : '-'}</div>
+                            <div>퇴근: {baseOut ? fmtHm(baseOut) : '-'}</div>
+                            {!baseIn && !baseOut ? (
+                              <div className="mt-1 text-xs text-gray-500">
+                                제안 전 시간이 응답에 포함되지 않았습니다.
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="rounded border bg-white p-3">
+                          <div className="text-xs font-medium text-gray-700">
+                            제안
+                          </div>
+                          <div className="mt-2 text-xs text-gray-700">
+                            <div>출근: {propIn ? fmtHm(propIn) : '-'}</div>
+                            <div>퇴근: {propOut ? fmtHm(propOut) : '-'}</div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ) : null}
-
-                {/* ✅ 수정 대상 날짜는 변하지 않으므로 제안 시간(시:분)과 분리 표시 */}
-                {data.proposedCheckInAt || data.proposedCheckOutAt ? (
-                  <>
-                    <div>
-                      대상 날짜:{' '}
-                      {fmtDate(
-                        data.proposedCheckInAt ??
-                          data.proposedCheckOutAt ??
-                          null
-                      )}
-                    </div>
-
-                    {/* ✅ 값이 있는 항목만 표시(불필요한 '-' 라인 숨김) */}
-                    {data.proposedCheckInAt ? (
-                      <div>제안 출근: {fmtHm(data.proposedCheckInAt)}</div>
-                    ) : null}
-
-                    {data.proposedCheckOutAt ? (
-                      <div>제안 퇴근: {fmtHm(data.proposedCheckOutAt)}</div>
-                    ) : null}
-                  </>
-                ) : (
-                  <div className="text-xs text-gray-500">
-                    제안 시간이 없어 대상 날짜/시간을 표시할 수 없습니다.
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               <div className="mt-2">
