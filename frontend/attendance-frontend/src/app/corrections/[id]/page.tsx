@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '../../context/AuthContext';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 import AppHeader from '@/app/_components/AppHeader';
@@ -275,15 +275,27 @@ export default function CorrectionDetailPage() {
 
   const tab = searchParams.get('tab') === 'approvable' ? 'approvable' : 'my';
 
-  const baseUrl = useMemo(() => {
-    return process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
-  }, []);
+  // ✅ 승인자 여부(최소): role 우선 + 필요 시 서버(approvable 1건 조회)로 보강
+  const roleBasedApprover = isApproverRole(user?.role);
+
+  // ✅ role 정보가 없거나 신뢰할 수 없는 경우를 대비해 approvable 조회를 1회 호출해 승인 권한을 판정
+  const [canApprove, setCanApprove] = useState<boolean | null>(null);
+
+  const isApprover = roleBasedApprover || canApprove === true;
+
+  // ✅ 실제 동작 기준 탭(권한 기반): 비승인자는 항상 my로 통일
+  const effectiveTab: 'my' | 'approvable' =
+    tab === 'approvable' && isApprover ? 'approvable' : 'my';
+
+  // 기존 정책 유지(최소 diff): env 없으면 localhost fallback
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
 
   const requestId = Number(params.id);
 
   // ✅ 목록 복귀 시 탭 유지(최소 UX)
   const backToListUrl =
-    tab === 'approvable'
+    effectiveTab === 'approvable'
       ? '/corrections?tab=approvable'
       : '/corrections?tab=my';
 
@@ -294,15 +306,6 @@ export default function CorrectionDetailPage() {
 
   // 승인/반려 시 입력(최소 UX)
   const [comment, setComment] = useState('');
-
-  const roleBasedApprover = useMemo(() => {
-    return isApproverRole(user?.role);
-  }, [user?.role]);
-
-  // ✅ role 정보가 없거나 신뢰할 수 없는 경우를 대비해 approvable 조회를 1회 호출해 승인 권한을 판정
-  const [canApprove, setCanApprove] = useState<boolean | null>(null);
-
-  const isApprover = roleBasedApprover || canApprove === true;
 
   async function fetchDetail() {
     if (!user) return;
@@ -322,7 +325,7 @@ export default function CorrectionDetailPage() {
       // URL에 scope가 붙어올 수 있으나, 신뢰할 수 없는 값이거나(직접 입력)
       // 권한이 없는 사용자가 approvable로 들어올 수 있으므로 최소 검증만 수행한다.
       const primaryScope: 'requested_by_me' | 'approvable' =
-        tab === 'approvable' ? 'approvable' : 'requested_by_me';
+        effectiveTab === 'approvable' ? 'approvable' : 'requested_by_me';
 
       const buildListUrl = (s: 'requested_by_me' | 'approvable') => {
         const base = `${baseUrl}/api/correction-requests?scope=${encodeURIComponent(s)}&page=0&size=200`;
@@ -518,7 +521,7 @@ export default function CorrectionDetailPage() {
             목록
           </button>
           <span className="text-xs text-gray-500">
-            {tab === 'approvable'
+            {effectiveTab === 'approvable'
               ? '승인 대기 탭에서 진입'
               : '내 정정 요청 탭에서 진입'}
           </span>

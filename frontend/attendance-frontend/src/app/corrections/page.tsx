@@ -68,17 +68,19 @@ export default function CorrectionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // tab=my | approvable (기본 my)
-  const tab = searchParams.get('tab') === 'approvable' ? 'approvable' : 'my';
-
   // ✅ 승인자만 승인 대기 탭 노출 (프론트 가드)
   // - role 기반만 사용 (최소/명확): MANAGER/ADMIN만 approvable 탭 접근 가능
   const isApprover = user?.role === 'MANAGER' || user?.role === 'ADMIN';
 
-  const baseUrl = useMemo(() => {
-    // 기존 정책 유지(최소 diff): env 없으면 localhost fallback
-    return process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
-  }, []);
+  // tab=my | approvable (기본 my)
+  const tab = searchParams.get('tab') === 'approvable' ? 'approvable' : 'my';
+
+  // ✅ 실제 동작 기준 탭(권한 기반): 비승인자는 항상 my로 강제
+  const effectiveTab: 'my' | 'approvable' = !isApprover ? 'my' : tab;
+
+  // 기존 정책 유지(최소 diff): env 없으면 localhost fallback
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
 
   const [items, setItems] = useState<CorrectionRequestListItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -88,9 +90,7 @@ export default function CorrectionsPage() {
   const fetchList = useCallback(async () => {
     if (!user) return;
 
-    // ✅ 직원이 approvable scope를 호출하지 않도록 차단
-    // - URL이 approvable로 들어와도(직접 입력/즐겨찾기 등) API 호출 전에 my로 강제
-    const effectiveTab: 'my' | 'approvable' = !isApprover ? 'my' : tab;
+    // ✅ URL이 approvable로 들어와도(직접 입력/즐겨찾기 등) 화면/호출 모두 my로 통일
     if (tab === 'approvable' && !isApprover) {
       router.replace('/corrections?tab=my');
     }
@@ -116,7 +116,7 @@ export default function CorrectionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, baseUrl, tab, isApprover, router]);
+  }, [user, baseUrl, tab, isApprover, router, effectiveTab]);
 
   useEffect(() => {
     if (!user) return;
@@ -133,6 +133,12 @@ export default function CorrectionsPage() {
   }, [user, isApprover, tab, router]);
 
   function switchTab(next: 'my' | 'approvable') {
+    // ✅ 비승인자는 approvable로 전환 불가(표시/접근 일관성)
+    if (next === 'approvable' && !isApprover) {
+      router.replace('/corrections?tab=my');
+      return;
+    }
+
     // URL로 탭 상태 유지(뒤로가기 UX 포함)
     setStatusFilter('ALL');
     const q = next === 'approvable' ? '?tab=approvable' : '?tab=my';
@@ -143,7 +149,7 @@ export default function CorrectionsPage() {
     // ✅ 목록 UX 보강(최소): 상태 필터 + 요청시각 내림차순 정렬
     // - 서버 정렬/필터가 아직 없다면 클라이언트에서 1차 대응
     const filtered =
-      tab === 'my' && statusFilter !== 'ALL'
+      effectiveTab === 'my' && statusFilter !== 'ALL'
         ? items.filter((it) => String(it.status) === statusFilter)
         : items;
 
@@ -157,7 +163,7 @@ export default function CorrectionsPage() {
 
       return bKey - aKey;
     });
-  }, [items, tab, statusFilter]);
+  }, [items, effectiveTab, statusFilter]);
 
   return (
     <div className="min-h-screen">
@@ -182,7 +188,9 @@ export default function CorrectionsPage() {
             type="button"
             onClick={() => switchTab('my')}
             className={`rounded px-3 py-2 text-sm ${
-              tab === 'my' ? 'bg-black text-white' : 'bg-gray-100 text-gray-800'
+              effectiveTab === 'my'
+                ? 'bg-black text-white'
+                : 'bg-gray-100 text-gray-800'
             }`}
             disabled={loading}
           >
@@ -193,7 +201,7 @@ export default function CorrectionsPage() {
               type="button"
               onClick={() => switchTab('approvable')}
               className={`rounded px-3 py-2 text-sm ${
-                tab === 'approvable'
+                effectiveTab === 'approvable'
                   ? 'bg-black text-white'
                   : 'bg-gray-100 text-gray-800'
               }`}
@@ -203,7 +211,7 @@ export default function CorrectionsPage() {
             </button>
           )}
         </div>
-        {tab === 'my' && (
+        {effectiveTab === 'my' && (
           <div className="mt-3 flex flex-wrap gap-2">
             {(
               [
@@ -243,7 +251,7 @@ export default function CorrectionsPage() {
 
         {!loading && !error && displayedItems.length === 0 && (
           <p className="mt-4 text-sm text-gray-600">
-            {tab === 'my'
+            {effectiveTab === 'my'
               ? '표시할 정정 요청이 없습니다.'
               : '승인 대기 요청이 없습니다.'}
           </p>
@@ -260,7 +268,7 @@ export default function CorrectionsPage() {
                   <li key={it.requestId} className="px-4 py-3 text-sm">
                     <Link
                       href={
-                        tab === 'approvable'
+                        effectiveTab === 'approvable'
                           ? `/corrections/${it.requestId}?tab=approvable`
                           : `/corrections/${it.requestId}?tab=my`
                       }
@@ -290,7 +298,7 @@ export default function CorrectionsPage() {
                               </span>
                             ) : null}
 
-                            {tab === 'approvable' ? (
+                            {effectiveTab === 'approvable' ? (
                               <span className="text-xs text-gray-600">
                                 요청자 {it.requestedBy}
                               </span>
