@@ -18,7 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.*;
 import java.util.List;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@Slf4j
 public class CorrectionRequestService {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
@@ -36,6 +39,11 @@ public class CorrectionRequestService {
         this.attendanceRepository = attendanceRepository;
         this.correctionRequestRepository = correctionRequestRepository;
         this.employeeRepository = employeeRepository;
+    }
+
+    private OffsetDateTime toOffsetKst(LocalDateTime v) {
+        if (v == null) return null;
+        return v.atZone(KST).toOffsetDateTime();
     }
 
     @Transactional
@@ -149,6 +157,7 @@ public class CorrectionRequestService {
             // 승인 대기함은 권한자만 접근 가능 (MANAGER/ADMIN)
             var approver = employeeRepository.findById(userId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
+
             if (!approver.isActive()) {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
             }
@@ -183,6 +192,132 @@ public class CorrectionRequestService {
         throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "지원하지 않는 scope 입니다.");
     }
 
+    /**
+     * 정정 요청 상세 조회
+     * - scope 기반 접근제어를 목록/상세에서 일관되게 유지
+     */
+    @Transactional(readOnly = true)
+    public CorrectionRequestDetailResponse read(Long userId, Long requestId, String scope) {
+        var req = correctionRequestRepository.findById(requestId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.CORRECTION_REQUEST_NOT_FOUND,
+                        "정정 요청을 찾을 수 없습니다."
+                ));
+
+        String sc = (scope == null) ? "" : scope.trim();
+
+        // 1) scope=requested_by_me: 요청자 본인만
+        if ("requested_by_me".equals(sc)) {
+            if (!req.getRequestedBy().equals(userId)) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+            }
+            return toDetailResponse(req);
+        }
+
+        // 2) scope=approvable: 승인 권한자만(+ 메이커-체커 동일 정책)
+        if ("approvable".equals(sc)) {
+            authorizeApprovableViewer(userId, req);
+            // approvable의 의미는 “승인 대기함”이므로, 상세도 최소로 PENDING만 허용(원하면 완화 가능)
+            if (req.getStatus() != CorrectionRequestStatus.PENDING) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+            }
+            return toDetailResponse(req);
+        }
+
+        // 3) scope 미지정: (요청자 본인) OR (승인 권한자) 허용
+        if (sc.isEmpty()) {
+            if (req.getRequestedBy().equals(userId)) {
+                return toDetailResponse(req);
+            }
+            // 승인 권한자로서 열람 시도
+            authorizeApprovableViewer(userId, req);
+            return toDetailResponse(req);
+        }
+
+        throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "지원하지 않는 scope 입니다.");
+    }
+
+    /**
+     * 상세 응답 전용 매핑
+     * - 목록 DTO(CorrectionRequestResponse)는 변경하지 않고, 상세에서만 원본/현재 시간을 보강합니다.
+     * - Attendance는 LocalDateTime을 사용하므로 KST 기준 OffsetDateTime으로 변환해 내려줍니다.
+     * - current(현재/Final)은 "승인된 최신 1건"(APPROVED, processedAt desc)을 적용한 결과로 계산합니다.
+     */
+    private CorrectionRequestDetailResponse toDetailResponse(CorrectionRequest r) {
+        var a = r.getAttendance();
+
+        // ✅ 제안 전(원본) 시간
+        OffsetDateTime originalIn = toKst(a.getCheckInTime());
+        OffsetDateTime originalOut = toKst(a.getCheckOutTime());
+
+        // ✅ 현재(Final) 시간: 승인된 최신 1건 합성(있으면 proposed로 덮어씀)
+        OffsetDateTime currentIn = originalIn;
+        OffsetDateTime currentOut = originalOut;
+
+        var latestApproved = correctionRequestRepository
+                .findFirstByAttendance_IdAndStatusOrderByProcessedAtDesc(a.getId(), CorrectionRequestStatus.APPROVED);
+        if (latestApproved.isPresent()) {
+            var ar = latestApproved.get();
+            if (ar.getProposedCheckInAt() != null) {
+                currentIn = ar.getProposedCheckInAt();
+            }
+            if (ar.getProposedCheckOutAt() != null) {
+                currentOut = ar.getProposedCheckOutAt();
+            }
+        }
+
+        return new CorrectionRequestDetailResponse(
+                r.getId(),
+                a.getId(),
+                r.getStatus(),
+                r.getType(),
+                r.getRequestedBy(),
+                r.getRequestedAt(),
+                r.getProposedCheckInAt(),
+                r.getProposedCheckOutAt(),
+                r.getReason(),
+                originalIn,
+                originalOut,
+                currentIn,
+                currentOut
+        );
+    }
+
+    /**
+     * approvable scope에서 “열람” 권한 강제 (최소)
+     * - ADMIN: 전체 허용
+     * - MANAGER: 동일 site만 허용
+     * - 메이커-체커: 본인 요청은 approvable 스코프로 열람 불가(목록 정책과 일관)
+     */
+    private void authorizeApprovableViewer(Long approverUserId, CorrectionRequest req) {
+        // 메이커-체커(본인 요청은 approvable 스코프에서 배제)
+        if (req.getRequestedBy().equals(approverUserId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
+
+        var approver = employeeRepository.findById(approverUserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
+        if (!approver.isActive()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
+
+        if (approver.getRole() == EmployeeRole.ADMIN) {
+            return;
+        }
+
+        if (approver.getRole() != EmployeeRole.MANAGER) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
+
+        var requester = employeeRepository.findById(req.getRequestedBy())
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
+        if (!requester.isActive()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
+        if (!requester.getSiteId().equals(approver.getSiteId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
+    }
 
     @Transactional
     public CorrectionRequestCancelResponse cancel(Long userId, Long requestId) {

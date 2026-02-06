@@ -7,11 +7,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * 정정 요청 API (MVP 1차)
  * - 생성 / 내 요청 목록(requested_by_me)만 우선 제공
  */
 @RestController
+@Slf4j
 @RequestMapping("/api")
 public class CorrectionRequestController {
 
@@ -40,6 +43,24 @@ public class CorrectionRequestController {
             @RequestParam(required = false) Integer size
     ) {
         return correctionRequestService.list(userId, scope, status, page, size);
+    }
+
+
+    /**
+     * 정정 요청 상세 조회
+     * - 프론트 상세(/corrections/{id}) 진입용
+     * - scope 기반으로 최소 접근제어를 통일:
+     *   - scope=requested_by_me: 요청자 본인만
+     *   - scope=approvable: 승인 권한자만(+ 메이커-체커 동일 정책)
+     *   - scope 미지정: (요청자 본인) OR (승인 권한자) 허용
+     */
+    @GetMapping("/correction-requests/{requestId}")
+    public CorrectionRequestDetailResponse read(
+            @CurrentUserId Long userId,
+            @PathVariable Long requestId,
+            @RequestParam(required = false) String scope
+    ) {
+        return correctionRequestService.read(userId, requestId, scope);
     }
 
     /**
