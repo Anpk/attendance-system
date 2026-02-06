@@ -75,7 +75,7 @@ public class AttendanceService {
         Attendance attendance = Attendance.checkIn(
                 userId,
                 today,
-                LocalDateTime.now(),
+                LocalDateTime.now(KST),
                 photoPath
         );
 
@@ -94,7 +94,7 @@ public class AttendanceService {
             throw new BusinessException(ErrorCode.ALREADY_CHECKED_OUT, "이미 퇴근 처리되었습니다.");
         }
 
-        attendance.checkOut(LocalDateTime.now());
+        attendance.checkOut(LocalDateTime.now(KST));
 
         var saved = attendanceRepository.save(attendance);
         return AttendanceActionResponse.from(saved);
@@ -262,6 +262,18 @@ public class AttendanceService {
             );
         }
         return YearMonth.parse(month);
+    }
+
+    /**
+     * 다른 도메인 서비스에서 Final 합성 규칙(승인 최신 1건)을 재사용하기 위한 공개 메서드.
+     * - 구현은 SSOT인 toFinalSnapshot()에 위임한다.
+     */
+    @Transactional(readOnly = true)
+    public FinalSnapshot computeFinalSnapshot(Attendance attendance) {
+        if (attendance == null) {
+            throw new IllegalArgumentException("attendance must not be null");
+        }
+        return toFinalSnapshot(attendance);
     }
 
     /**

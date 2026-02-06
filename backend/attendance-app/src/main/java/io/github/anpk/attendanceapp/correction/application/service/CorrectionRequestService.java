@@ -1,5 +1,6 @@
 package io.github.anpk.attendanceapp.correction.application.service;
 
+import io.github.anpk.attendanceapp.attendance.application.service.AttendanceService;
 import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequest;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestStatus;
@@ -30,20 +31,18 @@ public class CorrectionRequestService {
     private final AttendanceRepository attendanceRepository;
     private final CorrectionRequestRepository correctionRequestRepository;
     private final EmployeeRepository employeeRepository;
+    private final AttendanceService attendanceService;
 
     public CorrectionRequestService(
             AttendanceRepository attendanceRepository,
             CorrectionRequestRepository correctionRequestRepository,
-            EmployeeRepository employeeRepository
+            EmployeeRepository employeeRepository,
+            AttendanceService attendanceService
     ) {
         this.attendanceRepository = attendanceRepository;
         this.correctionRequestRepository = correctionRequestRepository;
         this.employeeRepository = employeeRepository;
-    }
-
-    private OffsetDateTime toOffsetKst(LocalDateTime v) {
-        if (v == null) return null;
-        return v.atZone(KST).toOffsetDateTime();
+        this.attendanceService = attendanceService;
     }
 
     @Transactional
@@ -250,21 +249,10 @@ public class CorrectionRequestService {
         OffsetDateTime originalIn = toKst(a.getCheckInTime());
         OffsetDateTime originalOut = toKst(a.getCheckOutTime());
 
-        // ✅ 현재(Final) 시간: 승인된 최신 1건 합성(있으면 proposed로 덮어씀)
-        OffsetDateTime currentIn = originalIn;
-        OffsetDateTime currentOut = originalOut;
-
-        var latestApproved = correctionRequestRepository
-                .findFirstByAttendance_IdAndStatusOrderByProcessedAtDesc(a.getId(), CorrectionRequestStatus.APPROVED);
-        if (latestApproved.isPresent()) {
-            var ar = latestApproved.get();
-            if (ar.getProposedCheckInAt() != null) {
-                currentIn = ar.getProposedCheckInAt();
-            }
-            if (ar.getProposedCheckOutAt() != null) {
-                currentOut = ar.getProposedCheckOutAt();
-            }
-        }
+        // ✅ 현재(Final) 시간: AttendanceService(SSOT)의 Final 합성 규칙을 그대로 사용
+        AttendanceService.FinalSnapshot snap = attendanceService.computeFinalSnapshot(a);
+        OffsetDateTime currentIn = snap.finalCheckInAt();
+        OffsetDateTime currentOut = snap.finalCheckOutAt();
 
         return new CorrectionRequestDetailResponse(
                 r.getId(),
