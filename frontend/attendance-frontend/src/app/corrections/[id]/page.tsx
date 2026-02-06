@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '../../context/AuthContext';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 import AppHeader from '@/app/_components/AppHeader';
@@ -28,14 +28,25 @@ type CorrectionRequestDetail = {
   rejectReason?: string | null;
 };
 
-type CorrectionRequestListResponse = {
-  items: CorrectionRequestDetail[];
-  page: number;
-  size: number;
-  totalElements: number;
-};
-
 type BusyAction = 'cancel' | 'approve' | 'reject' | null;
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
+}
+
+function getHttpStatus(err: unknown): number | null {
+  const r = asRecord(err);
+  if (!r) return null;
+
+  const direct = r['status'];
+  if (typeof direct === 'number') return direct;
+
+  const resp = asRecord(r['response']);
+  const respStatus = resp ? resp['status'] : null;
+  if (typeof respStatus === 'number') return respStatus;
+
+  return null;
+}
 
 function isApproverRole(role?: string): boolean {
   return role === 'MANAGER' || role === 'ADMIN';
@@ -273,25 +284,44 @@ export default function CorrectionDetailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const tab = searchParams.get('tab') === 'approvable' ? 'approvable' : 'my';
+  // ✅ URL 파라미터 호환: tab 또는 scope 둘 중 하나로도 진입할 수 있음
+  // - tab=approvable | my
+  // - scope=approvable | requested_by_me
+  const desiredTab = useMemo(() => {
+    const scope = searchParams.get('scope');
+    if (scope === 'approvable') return 'approvable';
 
-  // ✅ 승인자 여부(최소): role 우선 + 필요 시 서버(approvable 1건 조회)로 보강
-  const roleBasedApprover = isApproverRole(user?.role);
+    const tab = searchParams.get('tab');
+    return tab === 'approvable' ? 'approvable' : 'my';
+  }, [searchParams]);
 
-  // ✅ role 정보가 없거나 신뢰할 수 없는 경우를 대비해 approvable 조회를 1회 호출해 승인 권한을 판정
-  const [canApprove, setCanApprove] = useState<boolean | null>(null);
-
-  const isApprover = roleBasedApprover || canApprove === true;
+  // ✅ 승인자 여부: role 기반만 사용(approvable probe 제거 → EMPLOYEE approvable 호출 방지)
+  const isApprover = isApproverRole(user?.role);
 
   // ✅ 실제 동작 기준 탭(권한 기반): 비승인자는 항상 my로 통일
   const effectiveTab: 'my' | 'approvable' =
-    tab === 'approvable' && isApprover ? 'approvable' : 'my';
+    desiredTab === 'approvable' && isApprover ? 'approvable' : 'my';
 
-  // 기존 정책 유지(최소 diff): env 없으면 localhost fallback
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+  const baseUrl = useMemo(() => {
+    return process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+  }, []);
+
+  // ✅ dev(StrictMode) 등으로 동일 조건에서 effect가 2회 호출되는 경우가 있어
+  // 동일 fetchKey에 대해 "동시에" 2회 요청이 나가지 않도록 가드
+  const inFlightKeyRef = useRef<string | null>(null);
 
   const requestId = Number(params.id);
+
+  // ✅ 비승인자가 approvable로 접근한 경우 URL도 my로 정규화(UX 혼란 방지)
+  useEffect(() => {
+    if (!user) return;
+    if (!Number.isFinite(requestId)) return;
+
+    if (desiredTab === 'approvable' && !isApprover) {
+      // 현재 URL에 scope=approvable 또는 tab=approvable이 남아있으면 제거
+      router.replace(`/corrections/${requestId}?tab=my`);
+    }
+  }, [user, requestId, desiredTab, isApprover, router]);
 
   // ✅ 목록 복귀 시 탭 유지(최소 UX)
   const backToListUrl =
@@ -307,115 +337,71 @@ export default function CorrectionDetailPage() {
   // 승인/반려 시 입력(최소 UX)
   const [comment, setComment] = useState('');
 
-  async function fetchDetail() {
+  const fetchDetail = useCallback(async () => {
     if (!user) return;
     if (!Number.isFinite(requestId)) {
       setError('요청 ID가 올바르지 않습니다.');
       return;
     }
 
+    // ✅ 상세 GET 엔드포인트 사용(루프 제거)
+    // - scope는 화면 컨텍스트(effectiveTab)에 맞춰 전달
+    // - approvable은 승인자만 의미가 있으므로 비승인자는 requested_by_me로 강제
+    const primaryScope: 'requested_by_me' | 'approvable' =
+      effectiveTab === 'approvable' && isApprover
+        ? 'approvable'
+        : 'requested_by_me';
+
+    // ✅ 동일 조건의 중복 호출(특히 dev StrictMode) 방지
+    const fetchKey = `${user.userId}:${requestId}:${primaryScope}`;
+    if (inFlightKeyRef.current === fetchKey) return;
+    inFlightKeyRef.current = fetchKey;
+
     setLoading(true);
     setError('');
     try {
-      // 계약 기준: 상세 GET은 없음 → 목록 API로 가져온 뒤 requestId로 필터링
-      // ✅ 최소 호출 정책(루프 최소화)
-      // - 기본 1회 + 필요 시 fallback 1회만 시도
-      // - approvable 컨텍스트면 status=PENDING을 함께 사용(계약)
+      const buildReadUrl = (s: 'requested_by_me' | 'approvable') =>
+        `${baseUrl}/api/correction-requests/${requestId}?scope=${encodeURIComponent(s)}`;
 
-      // URL에 scope가 붙어올 수 있으나, 신뢰할 수 없는 값이거나(직접 입력)
-      // 권한이 없는 사용자가 approvable로 들어올 수 있으므로 최소 검증만 수행한다.
-      const primaryScope: 'requested_by_me' | 'approvable' =
-        effectiveTab === 'approvable' ? 'approvable' : 'requested_by_me';
+      let detail: CorrectionRequestDetail;
 
-      const buildListUrl = (s: 'requested_by_me' | 'approvable') => {
-        const base = `${baseUrl}/api/correction-requests?scope=${encodeURIComponent(s)}&page=0&size=200`;
-        return s === 'approvable' ? `${base}&status=PENDING` : base;
-      };
-
-      const tryFindOnce = async (s: 'requested_by_me' | 'approvable') => {
-        const res = await apiFetch<CorrectionRequestListResponse>(
-          buildListUrl(s),
+      try {
+        detail = await apiFetch<CorrectionRequestDetail>(
+          buildReadUrl(primaryScope),
           {
             headers: { 'X-USER-ID': String(user.userId) },
           }
         );
-        return (res.items ?? []).find((x) => x.requestId === requestId) ?? null;
-      };
-
-      let found: CorrectionRequestDetail | null = null;
-
-      // 1) primary 시도
-      try {
-        // approvable은 승인자만 접근 가능하므로, 승인자가 아니라면 바로 my로 우회
-        if (primaryScope === 'approvable' && !isApprover) {
-          found = await tryFindOnce('requested_by_me');
-        } else {
-          found = await tryFindOnce(primaryScope);
-        }
       } catch (e) {
-        // primary 실패 시 fallback 시도(아래에서 처리)
-      }
-
-      // 2) fallback 1회
-      if (!found) {
-        const fallbackScope: 'requested_by_me' | 'approvable' =
-          primaryScope === 'approvable' ? 'requested_by_me' : 'approvable';
-
-        // approvable fallback은 승인자만 시도(불필요한 403/네트워크 낭비 방지)
-        if (fallbackScope === 'approvable' && !isApprover) {
-          // skip
-        } else {
-          try {
-            found = await tryFindOnce(fallbackScope);
-          } catch {
-            // fallback 실패는 그대로 not found로 처리
+        // ✅ approvable로 시도하다가 "존재하지 않음(404)"일 때만 my로 1회 fallback
+        // - 403(권한 없음)에서는 scope를 바꿔도 해결되지 않으므로 재시도하지 않음
+        if (primaryScope === 'approvable') {
+          const status = getHttpStatus(e);
+          if (status === 404) {
+            detail = await apiFetch<CorrectionRequestDetail>(
+              buildReadUrl('requested_by_me'),
+              { headers: { 'X-USER-ID': String(user.userId) } }
+            );
+          } else {
+            throw e;
           }
+        } else {
+          throw e;
         }
-      }
-
-      if (!found) {
-        setData(null);
-        setError('해당 정정 요청을 찾을 수 없습니다.');
-        return;
       }
 
       // ✅ 응답 필드명 호환 → 제안 시간 정규화 순으로 적용
-      const compat = applyCompatLayer(found);
+      const compat = applyCompatLayer(detail);
       setData(normalizeProposedTimes(compat));
     } catch (e) {
       setData(null);
       setError(toUserMessage(e));
     } finally {
       setLoading(false);
+      // 완료되면 다음 동일 key 호출은 허용(단, 동시에 2회만 막음)
+      inFlightKeyRef.current = null;
     }
-  }
-
-  useEffect(() => {
-    if (!user) return;
-
-    // role로 이미 승인자 판정이 가능하면 확정
-    if (roleBasedApprover) {
-      setCanApprove(true);
-      return;
-    }
-
-    // 이미 판정 완료되었으면 재호출하지 않음
-    if (canApprove !== null) return;
-
-    // ✅ 최소 호출: 승인 대기(scope=approvable) 목록을 size=1로 요청해 200/403로 판정
-    (async () => {
-      try {
-        await apiFetch<CorrectionRequestListResponse>(
-          `${baseUrl}/api/correction-requests?scope=approvable&status=PENDING&page=0&size=1`,
-          { headers: { 'X-USER-ID': String(user.userId) } }
-        );
-        setCanApprove(true);
-      } catch {
-        // 403(FORBIDDEN) 포함 어떤 실패든 "승인 불가"로 처리(안전)
-        setCanApprove(false);
-      }
-    })();
-  }, [user, baseUrl, roleBasedApprover, canApprove]);
+  }, [baseUrl, effectiveTab, isApprover, requestId, user]);
 
   async function cancelRequest() {
     if (!user) return;
@@ -500,8 +486,7 @@ export default function CorrectionDetailPage() {
   useEffect(() => {
     if (!user) return;
     fetchDetail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, requestId, baseUrl]);
+  }, [user, fetchDetail]);
 
   const showCancel = !!data && data.status === 'PENDING' && !isApprover;
   const showApproveReject = !!data && data.status === 'PENDING' && isApprover;
