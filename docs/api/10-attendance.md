@@ -54,11 +54,30 @@
 
 ---
 
-## 📎 Related Contract Sections
+## ✅ Final 합성 규칙 (승인된 최신 정정 1건)
 
-- Contract §3 — Attendance (출퇴근)
-- Contract §5 — Final View Composition
-- Contract §6 — Attendance Read APIs
+- 조회 계열 응답은 **승인(APPROVED)된 최신 정정 요청 1건**만 반영한 “Final 값”을 반환한다.
+- 최신 기준은 `processedAt desc` 이다.
+- 승인된 정정이 없으면 원본 값을 반환한다.
+
+> ✅ **구현 참고(SSOT)**
+>
+> Final 합성은 `AttendanceService`의 단일 경로(예: `toFinalSnapshot(...)`)를 통해 적용되어야 한다.
+> 조회 엔드포인트가 추가/확장될 때도 **동일한 합성 경로를 재사용**해야 한다.
+
+### 적용 범위(점검용)
+
+아래 항목은 **모두 Final 합성 규칙을 적용**해야 한다.
+
+- `GET /api/attendance/today`
+- `GET /api/attendance` (목록: MVP 1차는 `month=YYYY-MM`만 우선 지원)
+- `GET /api/attendance/{attendanceId}` (단건)
+
+### 누락 방지 체크리스트(문서/코드 리뷰용)
+
+- [ ] 새로 추가한 Attendance **조회** 엔드포인트가 `toFinalSnapshot(...)` 경로를 타는가?
+- [ ] Final 최신 기준이 문서/코드 모두 `processedAt desc` 로 일치하는가?
+- [ ] Final 응답에 `isCorrected` 및(존재 시) `appliedCorrectionRequestId`가 일관되게 반영되는가?
 
 ---
 
@@ -198,7 +217,36 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 
 ---
 
-## 3. Attendance Read (단건 조회)
+## 3. Today Attendance (오늘 상태 조회)
+
+### Endpoint
+
+**GET** `/api/attendance/today`
+
+---
+
+### Description
+
+- 오늘 날짜(KST) 기준 근태 상태를 조회한다.
+- 반환 시간은 **Final 값**이다.
+
+---
+
+### Response
+
+```json
+{
+  "attendanceId": 101,
+  "workDate": "2026-01-18",
+  "checkInAt": "2026-01-18T09:02:11+09:00",
+  "checkOutAt": null,
+  "isCorrected": false
+}
+```
+
+---
+
+## 4. Attendance Read (단건 조회)
 
 ### Endpoint
 
@@ -238,7 +286,7 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 
 ---
 
-## 4. Attendance Read (목록 조회)
+## 5. Attendance Read (목록 조회)
 
 ### Endpoint
 
