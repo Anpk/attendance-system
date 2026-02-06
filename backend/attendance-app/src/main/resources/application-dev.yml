@@ -53,3 +53,5 @@ logging:
   level:
     org.springframework.boot.sql.init: DEBUG
     org.springframework.jdbc.datasource.init: DEBUG
+    root: INFO
+    io.github.anpk.attendanceapp: INFO
