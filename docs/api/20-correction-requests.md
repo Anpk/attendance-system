@@ -41,8 +41,24 @@
   - `PENDING → APPROVED`
   - `PENDING → REJECTED`
   - `PENDING → CANCELED`
-- **APPROVED 상태의 최신 요청 1건만** Final View에 반영된다.
+- **APPROVED 상태의 최신 요청 1건만** Final View에 반영된다. (최신 기준: `processedAt desc`)
 - 시간 기준은 **Asia/Seoul** 이다.
+
+### Final 합성 규칙과의 관계(중요)
+
+- 정정 요청 API는 **정정 요청의 생성/조회/처리(승인/반려/취소)**만 담당한다.
+- Attendance 조회(`/api/attendance/...`)에서 노출되는 시간은 항상 **Final 값**이며,
+  Final 합성 규칙은 Attendance 조회 계층에서 **단일 경로(SSOT)**로 적용되어야 한다.
+- 따라서 정정 요청의 승인 결과가 Attendance 조회에 반영되는지 확인할 때는,
+  **정정 API 응답이 아니라 Attendance 조회 응답(`/today`, 목록, 단건)을 기준**으로 확인한다.
+
+#### Final 합성 적용 범위(점검용)
+
+- [ ] `GET /api/attendance/today` 에 Final 합성이 적용되는가?
+- [ ] `GET /api/attendance` (목록: `month=YYYY-MM`) 에 Final 합성이 적용되는가?
+- [ ] `GET /api/attendance/{attendanceId}` (단건) 에 Final 합성이 적용되는가?
+
+> 참고: Final 최신 기준은 `processedAt desc` 이며, **APPROVED 상태의 최신 1건만** 반영된다.
 
 ---
 
@@ -140,7 +156,10 @@ Note: Attendance 도메인 API 경로는 Contract에 따라 단수형(`/api/atte
   "status": "PENDING",
   "type": "BOTH",
   "requestedBy": 5,
-  "requestedAt": "2026-01-18T19:00:00+09:00"
+  "requestedAt": "2026-01-18T19:00:00+09:00",
+  "proposedCheckInAt": "2026-01-18T09:00:00+09:00",
+  "proposedCheckOutAt": "2026-01-18T18:00:00+09:00",
+  "reason": "출퇴근 시간 오기입"
 }
 ```
 
@@ -203,7 +222,10 @@ Note: Attendance 도메인 API 경로는 Contract에 따라 단수형(`/api/atte
       "status": "PENDING",
       "type": "BOTH",
       "requestedBy": 5,
-      "requestedAt": "2026-01-18T19:00:00+09:00"
+      "requestedAt": "2026-01-18T19:00:00+09:00",
+      "proposedCheckInAt": "2026-01-18T09:00:00+09:00",
+      "proposedCheckOutAt": "2026-01-18T18:00:00+09:00",
+      "reason": "출퇴근 시간 오기입"
     }
   ],
   "page": 1,
@@ -214,7 +236,56 @@ Note: Attendance 도메인 API 경로는 Contract에 따라 단수형(`/api/atte
 
 ---
 
-## 4. Approve Correction Request (승인)
+## 4. Read Correction Request (정정 요청 상세 조회)
+
+### Endpoint
+
+**GET** `/api/correction-requests/{requestId}`
+
+---
+
+### Query Parameters
+
+| Name  | Type   | Required | Description |
+|-------|--------|----------|-------------|
+| scope | string | X        | approvable / requested_by_me / for_me / all |
+
+---
+
+### Rules
+
+- `scope=approvable` 상세는 **PENDING만 허용**한다.
+- `scope=approvable` 접근은 MANAGER/ADMIN 권한 범위에서만 허용된다.
+- `scope=requested_by_me`는 요청자 본인만 허용된다.
+- `scope`가 누락된 경우 서버는 **권한/관계 기반으로 유효한 scope로 강제/보정**할 수 있다.
+  - 예: EMPLOYEE가 `scope=approvable`로 접근 시 `requested_by_me` 또는 `for_me`로 보정(또는 403) — 구현 정책에 따름
+- 상세 응답은 **상세 전용 DTO**를 사용할 수 있으며, 이때 `original/current` 시간이 포함될 수 있다.
+
+---
+
+### Response (상세 전용)
+
+```json
+{
+  "requestId": 55,
+  "attendanceId": 101,
+  "status": "PENDING",
+  "type": "BOTH",
+  "requestedBy": 5,
+  "requestedAt": "2026-01-18T19:00:00+09:00",
+  "proposedCheckInAt": "2026-01-18T09:00:00+09:00",
+  "proposedCheckOutAt": "2026-01-18T18:00:00+09:00",
+  "reason": "출퇴근 시간 오기입",
+  "originalCheckInAt": "2026-01-18T09:02:11+09:00",
+  "originalCheckOutAt": "2026-01-18T18:01:03+09:00",
+  "currentCheckInAt": "2026-01-18T09:02:11+09:00",
+  "currentCheckOutAt": "2026-01-18T18:01:03+09:00"
+}
+```
+
+---
+
+## 5. Approve Correction Request (승인)
 
 ### Endpoint
 
@@ -247,14 +318,16 @@ Note: Attendance 도메인 API 경로는 Contract에 따라 단수형(`/api/atte
 {
   "requestId": 55,
   "status": "APPROVED",
-  "approvedBy": 2,
-  "approvedAt": "2026-01-18T19:10:00+09:00"
+  "processedBy": 2,
+  "processedAt": "2026-01-18T19:10:00+09:00",
+  "approveComment": "OK",
+  "rejectReason": null
 }
 ```
 
 ---
 
-## 5. Reject Correction Request (반려)
+## 6. Reject Correction Request (반려)
 
 ### Endpoint
 
@@ -276,14 +349,16 @@ Note: Attendance 도메인 API 경로는 Contract에 따라 단수형(`/api/atte
 {
   "requestId": 55,
   "status": "REJECTED",
-  "rejectedBy": 2,
-  "rejectedAt": "2026-01-18T19:12:00+09:00"
+  "processedBy": 2,
+  "processedAt": "2026-01-18T19:12:00+09:00",
+  "approveComment": null,
+  "rejectReason": "사유 미충족"
 }
 ```
 
 ---
 
-## 6. Cancel Correction Request (취소)
+## 7. Cancel Correction Request (취소)
 
 ### Endpoint
 
@@ -313,7 +388,8 @@ Note: Attendance 도메인 API 경로는 Contract에 따라 단수형(`/api/atte
 {
   "requestId": 55,
   "status": "CANCELED",
-  "canceledAt": "2026-01-18T19:15:00+09:00"
+  "processedAt": "2026-01-18T19:15:00+09:00",
+  "processedBy": 5
 }
 ```
 
