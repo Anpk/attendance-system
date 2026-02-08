@@ -1,4 +1,4 @@
-package io.github.anpk.attendanceapp.employee.domain;
+package io.github.anpk.attendanceapp.employee.domain.model;
 
 import jakarta.persistence.*;
 
@@ -25,6 +25,19 @@ public class Employee {
     private boolean active;
 
     protected Employee() {}
+
+    // ✅ Admin 최소 관리용 도메인 메서드 (setter 노출 최소화)
+    public void changeActive(boolean active) {
+        this.active = active;
+    }
+
+    public void changeRole(EmployeeRole role) {
+        this.role = role;
+    }
+
+    public void changeSiteId(Long siteId) {
+        this.siteId = siteId;
+    }
 
     public Long getUserId() { return userId; }
     public Long getSiteId() { return siteId; }

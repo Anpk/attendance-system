@@ -1,6 +1,6 @@
-package io.github.anpk.attendanceapp.employee.infrastructure;
+package io.github.anpk.attendanceapp.employee.infrastructure.repository;
 
-import io.github.anpk.attendanceapp.employee.domain.Employee;
+import io.github.anpk.attendanceapp.employee.domain.model.Employee;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

@@ -1,4 +1,4 @@
-package io.github.anpk.attendanceapp.employee.domain;
+package io.github.anpk.attendanceapp.employee.domain.model;
 
 /**
  * 직원 권한 (최소)

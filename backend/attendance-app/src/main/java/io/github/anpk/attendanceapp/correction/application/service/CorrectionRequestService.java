@@ -7,10 +7,11 @@ import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestSta
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestType;
 import io.github.anpk.attendanceapp.correction.infrastructure.repository.CorrectionRequestRepository;
 import io.github.anpk.attendanceapp.correction.interfaces.dto.*;
-import io.github.anpk.attendanceapp.employee.domain.EmployeeRole;
-import io.github.anpk.attendanceapp.employee.infrastructure.EmployeeRepository;
+import io.github.anpk.attendanceapp.employee.domain.model.EmployeeRole;
+import io.github.anpk.attendanceapp.employee.infrastructure.repository.EmployeeRepository;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.error.ErrorCode;
+import io.github.anpk.attendanceapp.site.infrastructure.repository.ManagerSiteAssignmentRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -32,17 +33,20 @@ public class CorrectionRequestService {
     private final CorrectionRequestRepository correctionRequestRepository;
     private final EmployeeRepository employeeRepository;
     private final AttendanceService attendanceService;
+    private final ManagerSiteAssignmentRepository managerSiteAssignmentRepository;
 
     public CorrectionRequestService(
             AttendanceRepository attendanceRepository,
             CorrectionRequestRepository correctionRequestRepository,
             EmployeeRepository employeeRepository,
-            AttendanceService attendanceService
+            AttendanceService attendanceService,
+            ManagerSiteAssignmentRepository managerSiteAssignmentRepository
     ) {
         this.attendanceRepository = attendanceRepository;
         this.correctionRequestRepository = correctionRequestRepository;
         this.employeeRepository = employeeRepository;
         this.attendanceService = attendanceService;
+        this.managerSiteAssignmentRepository = managerSiteAssignmentRepository;
     }
 
     @Transactional
@@ -395,19 +399,29 @@ public class CorrectionRequestService {
     }
 
     private org.springframework.data.domain.Page<CorrectionRequest> listApprovableForManager(
-            Long siteId,
+            Long siteId, // 기존 시그니처 유지(최소 diff) — 내부에서 담당 siteIds로 확장
             Long approverUserId,
             CorrectionRequestStatus status,
             org.springframework.data.domain.Pageable pageable
     ) {
-        // 동일 site의 활성 사용자 목록을 가져온 뒤, 해당 사용자가 만든 요청만 노출
-        var userIds = employeeRepository.findActiveUserIdsBySiteId(siteId);
-        // 메이커-체커: 본인 요청은 승인 대기함에 노출하지 않음
-        userIds.removeIf(id -> id.equals(approverUserId));
-        if (userIds.isEmpty()) {
+        // ✅ 변경: manager_site_assignments의 담당 siteIds 전체를 기준으로 approvable 구성
+        var siteIds = managerSiteAssignmentRepository.findSiteIdsByManagerUserId(approverUserId);
+        if (siteIds == null || siteIds.isEmpty()) {
             return org.springframework.data.domain.Page.empty(pageable);
         }
-        return correctionRequestRepository.findByRequestedByInAndStatus(userIds, status, pageable);
+
+        var userIds = new java.util.ArrayList<Long>();
+        for (Long sid : siteIds) {
+            var ids = employeeRepository.findActiveUserIdsBySiteId(sid);
+            if (ids != null && !ids.isEmpty()) userIds.addAll(ids);
+        }
+        // 메이커-체커: 본인 요청은 승인 대기함에 노출하지 않음
+        userIds.removeIf(id -> id.equals(approverUserId));
+
+        if (userIds.isEmpty()) return org.springframework.data.domain.Page.empty(pageable);
+        // 중복 제거
+        var distinct = userIds.stream().distinct().toList();
+        return correctionRequestRepository.findByRequestedByInAndStatus(distinct, status, pageable);
     }
 
     /**
@@ -442,9 +456,10 @@ public class CorrectionRequestService {
         if (!requester.isActive()) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
         }
-        if (!requester.getSiteId().equals(approver.getSiteId())) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
-        }
+        // ✅ 변경: manager_site_assignments 기준
+        boolean assigned = managerSiteAssignmentRepository
+                .existsByManagerUserIdAndSiteId(approverUserId, requester.getSiteId());
+        if (!assigned) throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
     }
 
     private static CorrectionRequestType resolveType(CorrectionRequestCreateRequest req) {
