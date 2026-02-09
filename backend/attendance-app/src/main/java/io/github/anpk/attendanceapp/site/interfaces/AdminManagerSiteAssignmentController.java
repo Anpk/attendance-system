@@ -11,6 +11,7 @@ import io.github.anpk.attendanceapp.site.infrastructure.repository.ManagerSiteAs
 import io.github.anpk.attendanceapp.site.infrastructure.repository.SiteRepository;
 import io.github.anpk.attendanceapp.site.interfaces.dto.AdminManagerSiteAssignRequest;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -56,6 +57,7 @@ public class AdminManagerSiteAssignmentController {
     }
 
     @DeleteMapping
+    @Transactional
     public void unassign(@CurrentUserId Long userId, @RequestParam Long managerUserId, @RequestParam Long siteId) {
         adminGuard.requireAdmin(userId);
         assignmentRepository.deleteByManagerUserIdAndSiteId(managerUserId, siteId);
