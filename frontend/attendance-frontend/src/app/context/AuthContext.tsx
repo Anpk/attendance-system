@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 type User = {
   userId: number;
@@ -9,6 +10,7 @@ type User = {
 
 type AuthContextType = {
   user: User | null;
+  ready: boolean;
   login: (user: User) => void;
   logout: () => void;
 };
@@ -45,51 +47,65 @@ function isStoredUser(v: unknown): v is User {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function readStoredUser(): User | null {
+  if (typeof window === 'undefined') return null;
+
+  const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
+  if (!stored) return null;
+
+  try {
+    const parsed: unknown = JSON.parse(stored);
+
+    if (!isStoredUser(parsed)) return null;
+
+    const o = parsed as Record<string, unknown>;
+    const userId =
+      typeof o.userId === 'number'
+        ? o.userId
+        : typeof o.userId === 'string'
+          ? Number(o.userId)
+          : NaN;
+
+    if (!Number.isFinite(userId)) return null;
+
+    return { userId, role: o.role as User['role'] };
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!stored) return;
-
-    try {
-      const parsed: unknown = JSON.parse(stored);
-
-      // ✅ role/userId 최소 검증 후에만 복원
-      if (isStoredUser(parsed)) {
-        const o = parsed as unknown as Record<string, unknown>;
-        const userId =
-          typeof o.userId === 'number'
-            ? o.userId
-            : typeof o.userId === 'string'
-              ? Number(o.userId)
-              : NaN;
-
-        // ✅ 저장된 포맷이 문자열이어도 내부 상태는 number로 정규화
-        setUser({ userId, role: o.role as User['role'] });
-      } else {
-        // 구버전/오염 데이터는 제거(다음 로그인에서 정상 생성)
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        setUser(null);
-      }
-    } catch {
+    const restored = readStoredUser();
+    if (restored) {
+      setUser(restored);
+    } else {
+      // 저장값이 없거나 유효하지 않으면 정리
       localStorage.removeItem(AUTH_STORAGE_KEY);
       setUser(null);
     }
+
+    // client hydration 완료 (SSR/CSR 첫 렌더 불일치 방지)
+    setReady(true);
   }, []);
 
   function login(user: User) {
     setUser(user);
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+    setReady(true);
   }
 
   function logout() {
     setUser(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    setReady(true);
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, ready, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -99,4 +115,35 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('AuthContext not found');
   return ctx;
+}
+
+export type RequireAuthOptions = {
+  roles?: User['role'][];
+};
+
+/**
+ * 공통 인증/권한 가드
+ * - ready 전에는 아무 것도 하지 않음(SSR/CSR 불일치/레이스 방지)
+ * - ready 후 user 없으면 /login으로 이동
+ * - roles가 있으면 forbidden 계산(페이지에서 권한없음 UI 표시용)
+ */
+export function useRequireAuth(options: RequireAuthOptions = {}) {
+  const { user, ready } = useAuth();
+  const router = useRouter();
+
+  const allowedRoles = options.roles;
+
+  const forbidden = useMemo(() => {
+    if (!ready) return false;
+    if (!user) return false;
+    if (!allowedRoles || allowedRoles.length === 0) return false;
+    return !allowedRoles.includes(user.role);
+  }, [ready, user, allowedRoles]);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!user) router.push('/login');
+  }, [ready, user, router]);
+
+  return { user, ready, forbidden };
 }
