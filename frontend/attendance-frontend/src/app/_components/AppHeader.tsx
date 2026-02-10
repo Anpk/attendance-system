@@ -10,7 +10,7 @@ import { useAuth } from '@/app/context/AuthContext';
  * - 임시 로그인 환경에서 role 확인/로그아웃 제공
  */
 export default function AppHeader() {
-  const { user, logout } = useAuth();
+  const { user, ready, logout } = useAuth();
   const router = useRouter();
 
   function handleLogout() {
@@ -25,7 +25,7 @@ export default function AppHeader() {
           <Link href="/attendance" className="text-base font-semibold">
             근태관리
           </Link>
-          {user && (
+          {ready && user && (
             <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
               #{user.userId} · {user.role}
             </span>
@@ -52,7 +52,35 @@ export default function AppHeader() {
             정정
           </Link>
 
-          {user && (
+          {ready &&
+            user &&
+            (user.role === 'ADMIN' || user.role === 'MANAGER') && (
+              <Link
+                href="/admin/sites"
+                className="rounded px-2 py-1 hover:bg-gray-100"
+              >
+                관리자 · Sites
+              </Link>
+            )}
+
+          {ready && user && user.role === 'ADMIN' && (
+            <Link
+              href="/admin/employees"
+              className="rounded px-2 py-1 hover:bg-gray-100"
+            >
+              관리자 · 직원
+            </Link>
+          )}
+
+          {ready && user && user.role === 'ADMIN' && (
+            <Link
+              href="/admin/assignments"
+              className="rounded px-2 py-1 hover:bg-gray-100"
+            >
+              관리자 · 담당Site
+            </Link>
+          )}
+          {ready && user && (
             <button
               type="button"
               onClick={handleLogout}

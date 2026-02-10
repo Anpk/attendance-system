@@ -1,3 +1,4 @@
+export type EmployeeRole = 'EMPLOYEE' | 'MANAGER' | 'ADMIN';
 export type ApiErrorResponse = {
   timestamp: string;
   status: number;
@@ -57,4 +58,41 @@ export type AttendanceListResponse = {
   page: number;
   size: number;
   totalElements: number;
+};
+
+// =========================
+// Admin Ops DTO (MVP)
+// =========================
+
+export type AdminSiteResponse = {
+  siteId: number;
+  name: string;
+  active: boolean;
+};
+
+export type AdminSiteCreateRequest = {
+  name: string;
+};
+
+export type AdminSiteUpdateRequest = {
+  name?: string | null;
+  active?: boolean | null;
+};
+
+export type AdminEmployeeResponse = {
+  userId: number;
+  active: boolean;
+  role: EmployeeRole;
+  siteId: number;
+};
+
+export type AdminEmployeeUpdateRequest = {
+  active?: boolean | null;
+  role?: EmployeeRole | null;
+  siteId?: number | null;
+};
+
+export type AdminManagerSiteAssignRequest = {
+  managerUserId: number;
+  siteId: number;
 };

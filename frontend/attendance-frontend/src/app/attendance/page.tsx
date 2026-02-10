@@ -1,7 +1,6 @@
 'use client';
 
-import { useAuth } from '../context/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '../context/AuthContext';
 import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 
 import { apiFetch } from '@/lib/api/client';
@@ -10,8 +9,7 @@ import type { AttendanceActionResponse } from '@/lib/api/types';
 import AppHeader from '@/app/_components/AppHeader';
 
 export default function AttendancePage() {
-  const { user } = useAuth();
-  const router = useRouter();
+  const { user, ready } = useRequireAuth();
 
   const [message, setMessage] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -144,15 +142,10 @@ export default function AttendancePage() {
   }, [user, baseUrl]);
 
   useEffect(() => {
-    // 로그인 전/로그아웃 상태면 로그인 페이지로 보냄
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    // 로그인 된 경우만 오늘 출근 상태 조회
+    if (!ready) return;
+    if (!user) return;
     fetchTodayAttendance();
-  }, [user, router, baseUrl, fetchTodayAttendance]);
+  }, [user, ready, baseUrl, fetchTodayAttendance]);
 
   // 체크인: 사진 업로드(멀티파트)로 처리
   async function checkInWithPhoto(photo: File) {
