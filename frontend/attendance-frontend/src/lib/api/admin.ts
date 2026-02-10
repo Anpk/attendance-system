@@ -9,13 +9,15 @@ import type {
 } from './types';
 
 function getBaseUrl(): string {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!baseUrl) {
+  const baseUrlRaw = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!baseUrlRaw) {
     // 기존 코드(AttendancePage)도 baseUrl 미설정 시 실제 요청이 깨질 수 있으므로
     // 여기서는 명시적으로 에러를 던져 조기 발견하도록 한다.
     throw new Error('NEXT_PUBLIC_API_BASE_URL is not set');
   }
-  return baseUrl;
+  // trailing slash 방지: "http://localhost:8080/" -> "http://localhost:8080"
+  const normalized = baseUrlRaw.replace(/\/+$/, '');
+  return normalized;
 }
 
 function authHeaders(userId: number) {
@@ -108,8 +110,12 @@ export async function adminRemoveManagerSite(
   siteId: number
 ): Promise<void> {
   const baseUrl = getBaseUrl();
+  const params = new URLSearchParams({
+    managerUserId: String(managerUserId),
+    siteId: String(siteId),
+  });
   await apiFetch<void>(
-    `${baseUrl}/api/admin/manager-site-assignments?managerUserId=${managerUserId}&siteId=${siteId}`,
+    `${baseUrl}/api/admin/manager-site-assignments?${params.toString()}`,
     { method: 'DELETE', headers: authHeaders(userId) }
   );
 }
