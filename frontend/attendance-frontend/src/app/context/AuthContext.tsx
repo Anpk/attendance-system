@@ -1,6 +1,13 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useRouter } from 'next/navigation';
 
 type User = {
@@ -146,4 +153,47 @@ export function useRequireAuth(options: RequireAuthOptions = {}) {
   }, [ready, user, router]);
 
   return { user, ready, forbidden };
+}
+
+export type FlashMessageOptions = {
+  ttlMs?: number;
+};
+
+/**
+ * 공통 Flash Message 훅
+ * - 동일한 TTL 동작을 페이지마다 중복 구현하지 않도록 통일
+ */
+export function useFlashMessage(options: FlashMessageOptions = {}) {
+  const ttlMs = options.ttlMs ?? 4000;
+
+  const [message, setMessage] = useState('');
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearMessage() {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setMessage('');
+  }
+
+  function setFlashMessage(next: string) {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setMessage(next);
+    timerRef.current = setTimeout(() => {
+      setMessage('');
+      timerRef.current = null;
+    }, ttlMs);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return { message, setFlashMessage, clearMessage };
 }

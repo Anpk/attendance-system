@@ -1,7 +1,7 @@
 'use client';
 
-import { useRequireAuth } from '@/app/context/AuthContext';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
+import { useEffect, useState } from 'react';
 
 import AppHeader from '@/app/_components/AppHeader';
 import { toUserMessage } from '@/lib/api/error-messages';
@@ -19,24 +19,13 @@ export default function AdminSitesPage() {
 
   const [items, setItems] = useState<AdminSiteResponse[]>([]);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-
-  const MESSAGE_TTL_MS = 4000;
-  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { message, setFlashMessage } = useFlashMessage({ ttlMs: 4000 });
 
   const [createName, setCreateName] = useState('');
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editActive, setEditActive] = useState<boolean>(true);
-
-  useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL, []);
-
-  function setFlashMessage(next: string) {
-    if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
-    setMessage(next);
-    messageTimerRef.current = setTimeout(() => setMessage(''), MESSAGE_TTL_MS);
-  }
 
   async function refresh() {
     if (!user) return;

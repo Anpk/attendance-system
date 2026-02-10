@@ -1,8 +1,8 @@
 'use client';
 
-import { useRequireAuth } from '@/app/context/AuthContext';
+import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import AppHeader from '@/app/_components/AppHeader';
 import { toUserMessage } from '@/lib/api/error-messages';
@@ -17,19 +17,11 @@ export default function AdminAssignmentsPage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const MESSAGE_TTL_MS = 4000;
-  const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { message, setFlashMessage } = useFlashMessage({ ttlMs: 4000 });
 
   const [managerUserId, setManagerUserId] = useState<string>('101');
   const [siteId, setSiteId] = useState<string>('1');
   const [managerSites, setManagerSites] = useState<number[]>([]);
-
-  function setFlashMessage(next: string) {
-    if (messageTimerRef.current) clearTimeout(messageTimerRef.current);
-    setMessage(next);
-    messageTimerRef.current = setTimeout(() => setMessage(''), MESSAGE_TTL_MS);
-  }
 
   async function refreshManagerSites() {
     if (!user) return;
@@ -50,6 +42,7 @@ export default function AdminAssignmentsPage() {
   }
 
   useEffect(() => {
+    if (!ready) return;
     if (!user) return;
     if (forbidden) {
       setFlashMessage('권한이 없습니다.');
@@ -124,7 +117,7 @@ export default function AdminAssignmentsPage() {
           </div>
         )}
 
-        {user?.role !== 'ADMIN' ? (
+        {ready && forbidden ? (
           <div className="rounded border bg-white p-4 text-sm">
             권한이 없습니다. (ADMIN 전용)
           </div>

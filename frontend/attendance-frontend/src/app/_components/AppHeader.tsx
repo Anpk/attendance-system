@@ -59,7 +59,7 @@ export default function AppHeader() {
                 href="/admin/sites"
                 className="rounded px-2 py-1 hover:bg-gray-100"
               >
-                관리자(Sites)
+                관리자 · Sites
               </Link>
             )}
 
@@ -68,7 +68,7 @@ export default function AppHeader() {
               href="/admin/employees"
               className="rounded px-2 py-1 hover:bg-gray-100"
             >
-              직원
+              관리자 · 직원
             </Link>
           )}
 
@@ -77,7 +77,7 @@ export default function AppHeader() {
               href="/admin/assignments"
               className="rounded px-2 py-1 hover:bg-gray-100"
             >
-              담당Site
+              관리자 · 담당Site
             </Link>
           )}
           {ready && user && (
