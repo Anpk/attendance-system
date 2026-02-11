@@ -24,6 +24,10 @@ public class Employee {
     @Column(nullable = false)
     private boolean active;
 
+    // ✅ dev 단계 최소 로그인용(추후 해시/암호화로 교체 전제)
+    @Column(nullable = false, length = 100)
+    private String password;
+
     protected Employee() {}
 
     // ✅ Admin 최소 관리용 도메인 메서드 (setter 노출 최소화)
@@ -43,4 +47,5 @@ public class Employee {
     public Long getSiteId() { return siteId; }
     public EmployeeRole getRole() { return role; }
     public boolean isActive() { return active; }
+    public String getPassword() { return password; }
 }
