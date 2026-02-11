@@ -106,9 +106,7 @@ export default function CorrectionsPage() {
           ? `${baseUrl}/api/correction-requests?scope=requested_by_me&page=0&size=50`
           : `${baseUrl}/api/correction-requests?scope=approvable&status=PENDING&page=0&size=50`;
 
-      const data = await apiFetch<CorrectionRequestListResponse>(url, {
-        headers: { 'X-USER-ID': String(user.userId) },
-      });
+      const data = await apiFetch<CorrectionRequestListResponse>(url);
       setItems(data.items ?? []);
     } catch (e) {
       setItems([]);

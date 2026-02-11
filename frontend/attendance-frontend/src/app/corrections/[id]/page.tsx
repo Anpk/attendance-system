@@ -367,20 +367,16 @@ export default function CorrectionDetailPage() {
 
       try {
         detail = await apiFetch<CorrectionRequestDetail>(
-          buildReadUrl(primaryScope),
-          {
-            headers: { 'X-USER-ID': String(user.userId) },
-          }
+          buildReadUrl(primaryScope)
         );
       } catch (e) {
         // ✅ approvable로 시도하다가 "존재하지 않음(404)"일 때만 my로 1회 fallback
-        // - 403(권한 없음)에서는 scope를 바꿔도 해결되지 않으므로 재시도하지 않음
+        // - 403(권한 없음)에서는 scope를 바꿔도 해결되지 않음
         if (primaryScope === 'approvable') {
           const status = getHttpStatus(e);
           if (status === 404) {
             detail = await apiFetch<CorrectionRequestDetail>(
-              buildReadUrl('requested_by_me'),
-              { headers: { 'X-USER-ID': String(user.userId) } }
+              buildReadUrl('requested_by_me')
             );
           } else {
             throw e;
@@ -413,7 +409,6 @@ export default function CorrectionDetailPage() {
       // 처리 후에는 진입 탭 컨텍스트를 유지한 채 목록으로 복귀
       await apiFetch(`${baseUrl}/api/correction-requests/${requestId}/cancel`, {
         method: 'POST',
-        headers: { 'X-USER-ID': String(user.userId) },
       });
       // 취소 후 목록으로 이동(모바일 UX: 뒤로가기 일관)
       router.push(backToListUrl);
@@ -436,11 +431,7 @@ export default function CorrectionDetailPage() {
         `${baseUrl}/api/correction-requests/${requestId}/approve`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-USER-ID': String(user.userId),
-          },
-          // apiFetch에서 JSON 직렬화를 처리하므로 객체 그대로 전달(중복 stringify 방지)
+          // apiFetch가 JSON stringify + content-type 처리
           body: { approveComment: comment.trim() || null },
         }
       );
@@ -468,11 +459,7 @@ export default function CorrectionDetailPage() {
       // 처리 후에는 진입 탭 컨텍스트를 유지한 채 목록으로 복귀
       await apiFetch(`${baseUrl}/api/correction-requests/${requestId}/reject`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-USER-ID': String(user.userId),
-        },
-        // 계약: 반려 사유 필드명은 reason
+        // apiFetch가 JSON stringify + content-type 처리
         body: { reason },
       });
       router.push(backToListUrl);
