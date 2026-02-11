@@ -20,43 +20,31 @@ function getBaseUrl(): string {
   return normalized;
 }
 
-function authHeaders(userId: number) {
-  return { 'X-USER-ID': String(userId) };
-}
-
 // -------------------------
 // Sites
 // -------------------------
-export async function adminListSites(
-  userId: number
-): Promise<AdminSiteResponse[]> {
+export async function adminListSites(): Promise<AdminSiteResponse[]> {
   const baseUrl = getBaseUrl();
-  return apiFetch<AdminSiteResponse[]>(`${baseUrl}/api/admin/sites`, {
-    headers: authHeaders(userId),
-  });
+  return apiFetch<AdminSiteResponse[]>(`${baseUrl}/api/admin/sites`);
 }
 
 export async function adminCreateSite(
-  userId: number,
   body: AdminSiteCreateRequest
 ): Promise<AdminSiteResponse> {
   const baseUrl = getBaseUrl();
   return apiFetch<AdminSiteResponse>(`${baseUrl}/api/admin/sites`, {
     method: 'POST',
-    headers: authHeaders(userId),
     body,
   });
 }
 
 export async function adminUpdateSite(
-  userId: number,
   siteId: number,
   body: AdminSiteUpdateRequest
 ): Promise<AdminSiteResponse> {
   const baseUrl = getBaseUrl();
   return apiFetch<AdminSiteResponse>(`${baseUrl}/api/admin/sites/${siteId}`, {
     method: 'PATCH',
-    headers: authHeaders(userId),
     body,
   });
 }
@@ -64,17 +52,12 @@ export async function adminUpdateSite(
 // -------------------------
 // Employees (ADMIN only)
 // -------------------------
-export async function adminListEmployees(
-  userId: number
-): Promise<AdminEmployeeResponse[]> {
+export async function adminListEmployees(): Promise<AdminEmployeeResponse[]> {
   const baseUrl = getBaseUrl();
-  return apiFetch<AdminEmployeeResponse[]>(`${baseUrl}/api/admin/employees`, {
-    headers: authHeaders(userId),
-  });
+  return apiFetch<AdminEmployeeResponse[]>(`${baseUrl}/api/admin/employees`);
 }
 
 export async function adminUpdateEmployee(
-  userId: number,
   targetUserId: number,
   body: AdminEmployeeUpdateRequest
 ): Promise<AdminEmployeeResponse> {
@@ -83,7 +66,6 @@ export async function adminUpdateEmployee(
     `${baseUrl}/api/admin/employees/${targetUserId}`,
     {
       method: 'PATCH',
-      headers: authHeaders(userId),
       body,
     }
   );
@@ -93,19 +75,16 @@ export async function adminUpdateEmployee(
 // Manager ↔ Site Assignments (ADMIN only)
 // -------------------------
 export async function adminAssignManagerSite(
-  userId: number,
   body: AdminManagerSiteAssignRequest
 ): Promise<void> {
   const baseUrl = getBaseUrl();
   await apiFetch<void>(`${baseUrl}/api/admin/manager-site-assignments`, {
     method: 'POST',
-    headers: authHeaders(userId),
     body,
   });
 }
 
 export async function adminRemoveManagerSite(
-  userId: number,
   managerUserId: number,
   siteId: number
 ): Promise<void> {
@@ -116,17 +95,15 @@ export async function adminRemoveManagerSite(
   });
   await apiFetch<void>(
     `${baseUrl}/api/admin/manager-site-assignments?${params.toString()}`,
-    { method: 'DELETE', headers: authHeaders(userId) }
+    { method: 'DELETE' }
   );
 }
 
 export async function adminListManagerSites(
-  userId: number,
   managerUserId: number
 ): Promise<number[]> {
   const baseUrl = getBaseUrl();
   return apiFetch<number[]>(
-    `${baseUrl}/api/admin/manager-site-assignments/managers/${managerUserId}/sites`,
-    { headers: authHeaders(userId) }
+    `${baseUrl}/api/admin/manager-site-assignments/managers/${managerUserId}/sites`
   );
 }

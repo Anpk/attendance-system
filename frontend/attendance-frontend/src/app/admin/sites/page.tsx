@@ -31,7 +31,7 @@ export default function AdminSitesPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const data = await adminListSites(user.userId);
+      const data = await adminListSites();
       setItems(data);
     } catch (e) {
       setFlashMessage(toUserMessage(e));
@@ -73,7 +73,7 @@ export default function AdminSitesPage() {
     }
     setLoading(true);
     try {
-      await adminCreateSite(user.userId, { name });
+      await adminCreateSite({ name });
       setCreateName('');
       await refresh();
       setFlashMessage('Site가 생성되었습니다.');
@@ -92,7 +92,7 @@ export default function AdminSitesPage() {
         name: editName.trim(),
         active: editActive,
       };
-      const updated = await adminUpdateSite(user.userId, siteId, body);
+      const updated = await adminUpdateSite(siteId, body);
       setItems((prev) => prev.map((x) => (x.siteId === siteId ? updated : x)));
       setFlashMessage('Site가 수정되었습니다.');
       cancelEdit();
