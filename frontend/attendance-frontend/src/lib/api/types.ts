@@ -1,4 +1,14 @@
 export type EmployeeRole = 'EMPLOYEE' | 'MANAGER' | 'ADMIN';
+export type AuthLoginRequest = {
+  userId: number;
+  password: string;
+};
+
+export type AuthLoginResponse = {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+};
 export type ApiErrorResponse = {
   timestamp: string;
   status: number;
