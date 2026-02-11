@@ -31,6 +31,17 @@ export async function apiFetch<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const headers = new Headers(options.headers);
+
+  // ✅ JWT(Bearer) 자동 주입(단일 지점)
+  // - 이미 Authorization이 있으면 덮어쓰지 않음
+  // - 브라우저 환경에서만 sessionStorage 접근
+  if (!headers.has('Authorization') && typeof window !== 'undefined') {
+    const token = window.sessionStorage.getItem('accessToken');
+    if (token && token.trim().length > 0) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+  }
+
   const isFormData =
     typeof FormData !== 'undefined' && options.body instanceof FormData;
   let body: BodyInit | undefined;

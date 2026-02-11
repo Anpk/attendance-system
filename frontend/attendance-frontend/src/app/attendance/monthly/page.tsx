@@ -7,6 +7,7 @@ import AppHeader from '@/app/_components/AppHeader';
 import CorrectionRequestModal from '@/app/_components/CorrectionRequestModal';
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
+import Link from 'next/link';
 
 type AttendanceListItem = {
   attendanceId: number;
@@ -63,8 +64,7 @@ export default function AttendanceMonthPage() {
       setError('');
       try {
         const data = await apiFetch<AttendanceListResponse>(
-          `${baseUrl}/api/attendance?month=${encodeURIComponent(targetMonth)}`,
-          { headers: { 'X-USER-ID': String(user.userId) } }
+          `${baseUrl}/api/attendance?month=${encodeURIComponent(targetMonth)}`
         );
         setItems(data.items ?? []);
       } catch (e) {
@@ -98,12 +98,12 @@ export default function AttendanceMonthPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">월별 근태 목록</h1>
-            <a
+            <Link
               href="/corrections"
               className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200"
             >
               정정 요청함
-            </a>
+            </Link>
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <span>월</span>
@@ -191,7 +191,6 @@ export default function AttendanceMonthPage() {
           open={!!selected}
           onClose={() => setSelected(null)}
           baseUrl={baseUrl}
-          userId={user.userId}
           attendanceId={selected.attendanceId}
           workDate={selected.workDate}
           initialCheckInAt={selected.checkInAt}

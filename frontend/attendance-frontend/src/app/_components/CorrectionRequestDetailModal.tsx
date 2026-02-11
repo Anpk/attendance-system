@@ -31,7 +31,6 @@ export type CorrectionRequestListItem = {
 
 type Props = {
   baseUrl: string;
-  userId: number;
   item: CorrectionRequestListItem;
   onClose: () => void;
   onCanceled: () => void;
@@ -54,7 +53,6 @@ function fmtIso(iso?: string | null): string {
 
 export default function CorrectionRequestDetailModal({
   baseUrl,
-  userId,
   item,
   onClose,
   onCanceled,
@@ -74,7 +72,6 @@ export default function CorrectionRequestDetailModal({
         `${baseUrl}/api/correction-requests/${item.requestId}/cancel`,
         {
           method: 'POST',
-          headers: { 'X-USER-ID': String(userId) },
         }
       );
 

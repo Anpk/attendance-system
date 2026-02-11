@@ -18,13 +18,16 @@ type User = {
 type AuthContextType = {
   user: User | null;
   ready: boolean;
-  login: (user: User) => void;
+  // accessToken은 선택: 호출자가 이미 sessionStorage에 저장했으면 생략 가능
+  login: (user: User, accessToken?: string) => void;
   logout: () => void;
 };
 
 // ✅ localStorage 복원 시 런타임 검증(최소 보강)
 // - 잘못된 값/구버전 포맷/수동 편집 등으로 role 기반 UI가 깨지는 것을 방지
 const AUTH_STORAGE_KEY = 'user';
+// ✅ JWT access token은 sessionStorage에 저장(브라우저 탭 단위)
+const ACCESS_TOKEN_KEY = 'accessToken';
 
 const ALLOWED_ROLES = ['EMPLOYEE', 'MANAGER', 'ADMIN'] as const;
 
@@ -93,21 +96,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 저장값이 없거나 유효하지 않으면 정리
       localStorage.removeItem(AUTH_STORAGE_KEY);
       setUser(null);
+      // stray token 정리(로그아웃 상태 보장)
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+      }
     }
 
     // client hydration 완료 (SSR/CSR 첫 렌더 불일치 방지)
     setReady(true);
   }, []);
 
-  function login(user: User) {
-    setUser(user);
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+  function login(nextUser: User, accessToken?: string) {
+    setUser(nextUser);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+
+    // accessToken이 제공되면 sessionStorage에 저장
+    if (typeof window !== 'undefined') {
+      if (accessToken && accessToken.trim().length > 0) {
+        window.sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+      }
+    }
+
     setReady(true);
   }
 
   function logout() {
     setUser(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    }
     setReady(true);
   }
 

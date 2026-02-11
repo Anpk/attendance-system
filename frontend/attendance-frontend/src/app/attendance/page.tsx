@@ -129,10 +129,7 @@ export default function AttendancePage() {
     if (!user) return;
     try {
       const data = await apiFetch<AttendanceActionResponse>(
-        `${baseUrl}/api/attendance/today`,
-        {
-          headers: { 'X-USER-ID': String(user.userId) },
-        }
+        `${baseUrl}/api/attendance/today`
       );
       setToday(data);
     } catch (e) {
@@ -165,7 +162,6 @@ export default function AttendancePage() {
         {
           method: 'POST',
           body: form, // apiFetch가 FormData를 그대로 전달(헤더 자동)
-          headers: { 'X-USER-ID': String(user.userId) },
         }
       );
 
@@ -222,7 +218,6 @@ export default function AttendancePage() {
     try {
       const result = await apiFetch<AttendanceActionResponse>(url, {
         method: 'POST',
-        headers: { 'X-USER-ID': String(user.userId) },
       });
 
       setToday(result);

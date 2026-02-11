@@ -4,11 +4,60 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 
-type Role = 'EMPLOYEE' | 'MANAGER' | 'ADMIN';
+import { apiFetch } from '@/lib/api/client';
+import { toUserMessage } from '@/lib/api/error-messages';
+import type { AuthLoginResponse } from '@/lib/api/types';
+
+type ParsedUser = {
+  userId: number;
+  role: 'EMPLOYEE' | 'MANAGER' | 'ADMIN';
+};
+
+function getApiBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+  return raw.replace(/\/+$/, '');
+}
+
+function parseJwtUser(token: string): ParsedUser | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    // base64url -> base64
+    let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4;
+    if (pad === 2) b64 += '==';
+    else if (pad === 3) b64 += '=';
+    else if (pad !== 0) return null;
+
+    const json = atob(b64);
+    const payload = JSON.parse(json) as Record<string, unknown>;
+
+    const sub = payload.sub;
+    const role = payload.role;
+
+    const userId =
+      typeof sub === 'number'
+        ? sub
+        : typeof sub === 'string' && sub.trim().length > 0
+          ? Number(sub)
+          : NaN;
+
+    if (!Number.isFinite(userId)) return null;
+    if (role !== 'EMPLOYEE' && role !== 'MANAGER' && role !== 'ADMIN')
+      return null;
+
+    return { userId, role };
+  } catch {
+    return null;
+  }
+}
 
 export default function LoginPage() {
   const [userId, setUserId] = useState('');
-  const [role, setRole] = useState<Role>('EMPLOYEE');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+
   const { login } = useAuth();
   const router = useRouter();
 
@@ -17,10 +66,49 @@ export default function LoginPage() {
     return Number.isFinite(n) ? n : NaN;
   }, [userId]);
 
-  function handleLogin() {
-    // 임시 로그인(백엔드 연동 전): role도 선택 가능하도록
-    login({ userId: userIdNum, role });
-    router.push('/attendance');
+  const canSubmit =
+    userId.trim().length > 0 &&
+    Number.isFinite(userIdNum) &&
+    password.trim().length > 0;
+
+  async function handleLogin() {
+    setMessage('');
+
+    if (!Number.isFinite(userIdNum) || password.trim().length === 0) {
+      setMessage('사번/비밀번호를 확인해 주세요.');
+      return;
+    }
+
+    try {
+      const res = await apiFetch<AuthLoginResponse>(
+        `${getApiBaseUrl()}/api/auth/login`,
+        {
+          method: 'POST',
+          body: { userId: userIdNum, password: password.trim() },
+        }
+      );
+
+      if (!res?.accessToken) {
+        setMessage('로그인 응답을 해석할 수 없습니다.');
+        return;
+      }
+
+      // ✅ Bearer 토큰 저장(탭 단위)
+      sessionStorage.setItem('accessToken', res.accessToken);
+
+      const parsed = parseJwtUser(res.accessToken);
+      if (!parsed) {
+        setMessage('로그인 응답을 해석할 수 없습니다.');
+        return;
+      }
+
+      // ✅ role 기반 UI를 위해 user 저장 + token 저장
+      login(parsed, res.accessToken);
+
+      router.push('/attendance');
+    } catch (e) {
+      setMessage(toUserMessage(e));
+    }
   }
 
   return (
@@ -39,27 +127,29 @@ export default function LoginPage() {
       </div>
 
       <div className="flex w-full max-w-xs flex-col gap-2">
-        <label className="text-sm text-gray-700">역할</label>
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value as Role)}
+        <label className="text-sm text-gray-700">비밀번호</label>
+        <input
+          type="password"
+          placeholder="비밀번호 입력"
           className="rounded border px-4 py-2"
-        >
-          <option value="EMPLOYEE">EMPLOYEE</option>
-          <option value="MANAGER">MANAGER</option>
-          <option value="ADMIN">ADMIN</option>
-        </select>
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
       </div>
 
       <button
         onClick={handleLogin}
         className="rounded bg-blue-600 px-6 py-2 text-white disabled:opacity-50"
-        disabled={!userId || !Number.isFinite(userIdNum)}
+        disabled={!canSubmit}
       >
         로그인
       </button>
 
-      <p className="text-xs text-gray-500">테스트용 임시 로그인입니다.</p>
+      {message ? (
+        <p className="max-w-xs text-center text-sm text-red-600">{message}</p>
+      ) : null}
+
+      <p className="text-xs text-gray-500">사번/비밀번호로 로그인합니다.</p>
     </main>
   );
 }

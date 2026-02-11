@@ -11,7 +11,6 @@ type Props = {
   open: boolean;
   onClose: () => void;
   baseUrl: string;
-  userId: number;
   attendanceId: number;
   // YYYY-MM-DD (목록 행의 workDate를 전달받아 날짜 고정)
   workDate: string;
@@ -42,7 +41,6 @@ export default function CorrectionRequestModal({
   open,
   onClose,
   baseUrl,
-  userId,
   attendanceId,
   workDate,
   initialCheckInAt,
@@ -164,11 +162,7 @@ export default function CorrectionRequestModal({
         `${baseUrl}/api/attendance/${attendanceId}/correction-requests`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-USER-ID': String(userId),
-          },
-          // apiFetch가 JSON stringify를 수행하므로 객체 그대로 전달
+          // apiFetch가 JSON stringify + content-type 처리
           body: {
             type,
             proposedCheckInAt,

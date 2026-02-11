@@ -32,7 +32,7 @@ export default function AdminAssignmentsPage() {
     }
     setLoading(true);
     try {
-      const ids = await adminListManagerSites(user.userId, mId);
+      const ids = await adminListManagerSites(mId);
       setManagerSites(ids);
     } catch (e) {
       setFlashMessage(toUserMessage(e));
@@ -62,7 +62,7 @@ export default function AdminAssignmentsPage() {
     }
     setLoading(true);
     try {
-      await adminAssignManagerSite(user.userId, {
+      await adminAssignManagerSite({
         managerUserId: mId,
         siteId: sId,
       });
@@ -85,7 +85,7 @@ export default function AdminAssignmentsPage() {
     }
     setLoading(true);
     try {
-      await adminRemoveManagerSite(user.userId, mId, sId);
+      await adminRemoveManagerSite(mId, sId);
       setFlashMessage('해제 완료');
       await refreshManagerSites();
     } catch (e) {

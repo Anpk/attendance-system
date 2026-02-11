@@ -26,7 +26,7 @@ export default function AdminEmployeesPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const data = await adminListEmployees(user.userId);
+      const data = await adminListEmployees();
       setItems(data);
     } catch (e) {
       setFlashMessage(toUserMessage(e));
@@ -67,11 +67,7 @@ export default function AdminEmployeesPage() {
         role: editRole,
         siteId: Number.isFinite(siteIdNum) ? siteIdNum : null,
       };
-      const updated = await adminUpdateEmployee(
-        user.userId,
-        targetUserId,
-        body
-      );
+      const updated = await adminUpdateEmployee(targetUserId, body);
       setItems((prev) =>
         prev.map((it) => (it.userId === targetUserId ? updated : it))
       );
