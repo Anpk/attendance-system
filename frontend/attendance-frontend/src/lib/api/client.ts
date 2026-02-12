@@ -26,6 +26,21 @@ async function parseJsonSafe(res: Response): Promise<unknown> {
   }
 }
 
+function notifyUnauthorized(message?: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent('auth:unauthorized', {
+        detail: {
+          message: message ?? '세션이 만료되었습니다. 다시 로그인해 주세요.',
+        },
+      })
+    );
+  } catch {
+    // ignore
+  }
+}
+
 export async function apiFetch<T>(
   url: string,
   options: RequestOptions = {}
@@ -68,6 +83,15 @@ export async function apiFetch<T>(
   }
 
   const payload = await parseJsonSafe(res);
+
+  // ✅ 401(UNAUTHORIZED) 전역 처리: 토큰 만료/무효 시 단일 지점에서 로그인 UX로 유도
+  if (res.status === 401) {
+    const msg =
+      isApiErrorResponse(payload) && payload.code === 'UNAUTHORIZED'
+        ? payload.message
+        : undefined;
+    notifyUnauthorized(msg);
+  }
 
   if (isApiErrorResponse(payload)) {
     throw new ApiError({

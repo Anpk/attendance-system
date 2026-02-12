@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 
 import { apiFetch } from '@/lib/api/client';
@@ -60,6 +60,7 @@ export default function LoginPage() {
 
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const userIdNum = useMemo(() => {
     const n = Number(userId);
@@ -70,6 +71,22 @@ export default function LoginPage() {
     userId.trim().length > 0 &&
     Number.isFinite(userIdNum) &&
     password.trim().length > 0;
+
+  useEffect(() => {
+    const reason = searchParams.get('reason');
+    if (reason === 'expired') {
+      setMessage('세션이 만료되었습니다. 다시 로그인해 주세요.');
+    }
+  }, [searchParams]);
+
+  function getSafeNext(): string | null {
+    const raw = searchParams.get('next');
+    if (!raw) return null;
+    // ✅ open redirect 방지: 상대 경로만 허용
+    if (!raw.startsWith('/')) return null;
+    if (raw.startsWith('//')) return null;
+    return raw;
+  }
 
   async function handleLogin() {
     setMessage('');
@@ -105,7 +122,8 @@ export default function LoginPage() {
       // ✅ role 기반 UI를 위해 user 저장 + token 저장
       login(parsed, res.accessToken);
 
-      router.push('/attendance');
+      const next = getSafeNext();
+      router.replace(next ?? '/attendance');
     } catch (e) {
       setMessage(toUserMessage(e));
     }

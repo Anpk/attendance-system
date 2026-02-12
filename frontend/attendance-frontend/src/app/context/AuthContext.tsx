@@ -8,7 +8,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { apiFetch } from '@/lib/api/client';
+import type { AuthMeResponse } from '@/lib/api/types';
 
 type User = {
   userId: number;
@@ -84,26 +86,97 @@ function readStoredUser(): User | null {
   }
 }
 
+function getApiBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+  return raw.replace(/\/+$/, '');
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
+  const router = useRouter();
+  const unauthorizedHandledRef = useRef(false);
 
   useEffect(() => {
-    const restored = readStoredUser();
-    if (restored) {
-      setUser(restored);
-    } else {
-      // 저장값이 없거나 유효하지 않으면 정리
-      localStorage.removeItem(AUTH_STORAGE_KEY);
+    if (typeof window === 'undefined') return;
+
+    function onUnauthorized(_ev: Event) {
+      if (unauthorizedHandledRef.current) return;
+      unauthorizedHandledRef.current = true;
+
+      // session/local 정리 + 로그인 화면으로 이동
       setUser(null);
-      // stray token 정리(로그아웃 상태 보장)
-      if (typeof window !== 'undefined') {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+      setReady(true);
+
+      // login 페이지에서 reason 처리
+      const nextPath = `${window.location.pathname}${window.location.search ?? ''}`;
+      router.replace(
+        `/login?reason=expired&next=${encodeURIComponent(nextPath)}`
+      );
+
+      // 연속 호출 레이스 방지(짧은 락)
+      setTimeout(() => {
+        unauthorizedHandledRef.current = false;
+      }, 1500);
+    }
+
+    window.addEventListener('auth:unauthorized', onUnauthorized);
+    return () => {
+      window.removeEventListener('auth:unauthorized', onUnauthorized);
+    };
+  }, [router]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restore() {
+      if (typeof window === 'undefined') {
+        if (!cancelled) setReady(true);
+        return;
+      }
+
+      // ✅ token이 없으면 로그인 상태로 간주하지 않음
+      const token = window.sessionStorage.getItem(ACCESS_TOKEN_KEY);
+      if (!token || token.trim().length === 0) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
         window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+        if (!cancelled) {
+          setUser(null);
+          setReady(true);
+        }
+        return;
+      }
+
+      try {
+        // ✅ Bearer는 apiFetch에서 자동 주입됨
+        const me = await apiFetch<AuthMeResponse>(
+          `${getApiBaseUrl()}/api/auth/me`
+        );
+        if (cancelled) return;
+
+        // ✅ role/userId는 서버 응답을 신뢰(만료/무효는 catch로 처리)
+        const nextUser: User = { userId: me.userId, role: me.role };
+        setUser(nextUser);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+        setReady(true);
+      } catch {
+        // 만료/무효 토큰 등: 저장값 정리 후 비로그인 상태로 전환
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+        if (!cancelled) {
+          setUser(null);
+          setReady(true);
+        }
       }
     }
 
-    // client hydration 완료 (SSR/CSR 첫 렌더 불일치 방지)
-    setReady(true);
+    restore();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function login(nextUser: User, accessToken?: string) {
@@ -155,6 +228,13 @@ export type RequireAuthOptions = {
 export function useRequireAuth(options: RequireAuthOptions = {}) {
   const { user, ready } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const nextPath = useMemo(() => {
+    const qs = searchParams?.toString?.() ?? '';
+    return qs && qs.length > 0 ? `${pathname}?${qs}` : pathname;
+  }, [pathname, searchParams]);
 
   const allowedRoles = options.roles;
 
@@ -167,8 +247,8 @@ export function useRequireAuth(options: RequireAuthOptions = {}) {
 
   useEffect(() => {
     if (!ready) return;
-    if (!user) router.push('/login');
-  }, [ready, user, router]);
+    if (!user) router.push(`/login?next=${encodeURIComponent(nextPath)}`);
+  }, [ready, user, router, nextPath]);
 
   return { user, ready, forbidden };
 }

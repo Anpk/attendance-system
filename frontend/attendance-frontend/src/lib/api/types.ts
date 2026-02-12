@@ -9,6 +9,14 @@ export type AuthLoginResponse = {
   tokenType: 'Bearer';
   expiresIn: number;
 };
+
+export type AuthMeResponse = {
+  userId: number;
+  role: EmployeeRole;
+  active: boolean;
+  siteId: number;
+};
+
 export type ApiErrorResponse = {
   timestamp: string;
   status: number;
