@@ -1,6 +1,8 @@
 package io.github.anpk.attendanceapp.auth.interfaces;
 
+import io.github.anpk.attendanceapp.auth.CurrentUserId;
 import io.github.anpk.attendanceapp.auth.jwt.JwtTokenService;
+import io.github.anpk.attendanceapp.employee.domain.model.EmployeeRole;
 import io.github.anpk.attendanceapp.employee.infrastructure.repository.EmployeeRepository;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.error.ErrorCode;
@@ -39,6 +41,19 @@ public class AuthController {
         return new LoginResponse(token, "Bearer", jwtTokenService.getExpiresSeconds());
     }
 
+    @GetMapping("/me")
+    public MeResponse me(@CurrentUserId Long userId) {
+        var e = employeeRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED, "인증 정보가 올바르지 않습니다."));
+
+        if (!e.isActive()) {
+            throw new BusinessException(ErrorCode.EMPLOYEE_INACTIVE, "비활성 사용자입니다.");
+        }
+
+        return new MeResponse(e.getUserId(), e.getRole(), e.isActive(), e.getSiteId());
+    }
+
     public record LoginRequest(Long userId, String password) {}
     public record LoginResponse(String accessToken, String tokenType, long expiresIn) {}
+    public record MeResponse(Long userId, EmployeeRole role, boolean active, Long siteId) {}
 }

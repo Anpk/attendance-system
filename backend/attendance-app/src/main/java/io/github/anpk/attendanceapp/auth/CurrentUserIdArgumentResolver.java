@@ -1,5 +1,6 @@
 package io.github.anpk.attendanceapp.auth;
 
+import io.github.anpk.attendanceapp.auth.jwt.JwtAuthFilter;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.error.ErrorCode;
 import org.springframework.core.MethodParameter;
@@ -26,10 +27,7 @@ public class CurrentUserIdArgumentResolver implements HandlerMethodArgumentResol
             WebDataBinderFactory binderFactory
     ) {
         // ✅ JWT 필터가 주입한 userId가 있으면 우선 사용
-        Object attr = webRequest.getAttribute(
-                io.github.anpk.attendanceapp.auth.jwt.JwtAuthFilter.REQ_ATTR_USER_ID,
-                NativeWebRequest.SCOPE_REQUEST
-        );
+        Object attr = webRequest.getAttribute(JwtAuthFilter.REQ_ATTR_USER_ID, NativeWebRequest.SCOPE_REQUEST);
         if (attr instanceof Long) {
             return attr;
         }
