@@ -104,9 +104,17 @@ export type AdminEmployeeResponse = {
   siteId: number;
 };
 
+export type AdminEmployeeCreateRequest = {
+  userId: number;
+  username: string;
+  password: string;
+  role: EmployeeRole;
+  siteId: number;
+};
+
 export type AdminEmployeeUpdateRequest = {
   active?: boolean | null;
-  role?: EmployeeRole | null;
+  username?: string | null;
   siteId?: number | null;
 };
 

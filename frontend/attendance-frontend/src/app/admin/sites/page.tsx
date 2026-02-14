@@ -5,11 +5,13 @@ import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
 import { toUserMessage } from '@/lib/api/error-messages';
 import type {
   AdminEmployeeResponse,
+  AdminEmployeeCreateRequest,
   AdminSiteResponse,
   EmployeeRole,
 } from '@/lib/api/types';
 import {
   adminAssignManagerSite,
+  adminCreateEmployee,
   adminCreateSite,
   adminListEmployees,
   adminListManagerSites,
@@ -54,6 +56,21 @@ export default function AdminSitesPage() {
   const [editEmpSiteId, setEditEmpSiteId] = useState<string>('1');
   const [editingEmpRole, setEditingEmpRole] =
     useState<EmployeeRole>('EMPLOYEE');
+  const [editEmpUsername, setEditEmpUsername] = useState<string>('');
+
+  // create (ADMIN only)
+  const [createEmpUserId, setCreateEmpUserId] = useState<string>('');
+  const [createEmpUsername, setCreateEmpUsername] = useState<string>('');
+  const [createEmpPassword, setCreateEmpPassword] = useState<string>('');
+  const [createEmpSiteId, setCreateEmpSiteId] = useState<string>('1');
+  const [createEmpRole, setCreateEmpRole] = useState<EmployeeRole>('EMPLOYEE');
+
+  const canCreateEmployee = user?.role === 'ADMIN';
+  const canEditEmployeeSiteId = user?.role === 'ADMIN';
+  const showAssignmentsUi =
+    user?.role === 'ADMIN' &&
+    editingUserId != null &&
+    editingEmpRole === 'MANAGER';
 
   // ---------- Assignments (for MANAGER target only) ----------
   const isEditingManager = useMemo(() => {
@@ -164,13 +181,20 @@ export default function AdminSitesPage() {
     setEditEmpActive(x.active);
     setEditEmpSiteId(String(x.siteId));
     setEditingEmpRole(x.role);
-    // assignments 초기화
-    setMgrAssignedSiteIds([]);
-    setMgrSiteIdInput(String(x.siteId));
+
+    // username(응답에 포함되어 있을 수 있음: 구버전 호환)
+    setEditEmpUsername((x as unknown as { username?: string }).username ?? '');
+
+    // assignments는 ADMIN에서만 편집(UI 노출)하므로 초기화도 ADMIN에서만
+    if (user?.role === 'ADMIN') {
+      setMgrAssignedSiteIds([]);
+      setMgrSiteIdInput(String(x.siteId));
+    }
   }
 
   function cancelEditEmployee() {
     setEditingUserId(null);
+    setEditEmpUsername('');
   }
 
   async function submitUpdateEmployee(targetUserId: number) {
@@ -178,9 +202,15 @@ export default function AdminSitesPage() {
     setLoading(true);
     try {
       const siteIdNum = Number(editEmpSiteId);
+      const trimmedUsername = editEmpUsername.trim();
       const body = {
         active: editEmpActive,
-        siteId: Number.isFinite(siteIdNum) ? siteIdNum : null,
+        siteId: canEditEmployeeSiteId
+          ? Number.isFinite(siteIdNum)
+            ? siteIdNum
+            : null
+          : null,
+        username: trimmedUsername.length > 0 ? trimmedUsername : null,
         // role은 수정 금지: 보내지 않음
       };
       const updated = await adminUpdateEmployee(targetUserId, body);
@@ -198,6 +228,10 @@ export default function AdminSitesPage() {
 
   // ---------- Assignments helpers ----------
   async function refreshManagerAssignments(managerUserId: number) {
+    if (user?.role !== 'ADMIN') {
+      setFlashMessage('권한이 없습니다.');
+      return;
+    }
     setLoading(true);
     try {
       const ids = await adminListManagerSites(managerUserId);
@@ -210,6 +244,10 @@ export default function AdminSitesPage() {
   }
 
   async function assignManagerSite(managerUserId: number) {
+    if (user?.role !== 'ADMIN') {
+      setFlashMessage('권한이 없습니다.');
+      return;
+    }
     const sId = Number(mgrSiteIdInput);
     if (!Number.isFinite(sId)) {
       setFlashMessage('siteId를 확인해 주세요.');
@@ -228,6 +266,10 @@ export default function AdminSitesPage() {
   }
 
   async function removeManagerSite(managerUserId: number) {
+    if (user?.role !== 'ADMIN') {
+      setFlashMessage('권한이 없습니다.');
+      return;
+    }
     const sId = Number(mgrSiteIdInput);
     if (!Number.isFinite(sId)) {
       setFlashMessage('siteId를 확인해 주세요.');
@@ -444,6 +486,128 @@ export default function AdminSitesPage() {
         ------------------------ */}
         {tab === 'employees' && (
           <section className="rounded border bg-white p-4">
+            {canCreateEmployee && (
+              <div className="mb-6 rounded border bg-white p-3">
+                <div className="mb-2 text-sm font-semibold">직원 생성</div>
+
+                <div className="grid gap-2">
+                  <label className="text-xs text-gray-700">
+                    userId
+                    <input
+                      value={createEmpUserId}
+                      onChange={(e) => setCreateEmpUserId(e.target.value)}
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      inputMode="numeric"
+                      placeholder="예: 200"
+                    />
+                  </label>
+
+                  <label className="text-xs text-gray-700">
+                    username
+                    <input
+                      value={createEmpUsername}
+                      onChange={(e) => setCreateEmpUsername(e.target.value)}
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      placeholder="예: user-200"
+                    />
+                  </label>
+
+                  <label className="text-xs text-gray-700">
+                    password
+                    <input
+                      value={createEmpPassword}
+                      onChange={(e) => setCreateEmpPassword(e.target.value)}
+                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      placeholder="예: pw200"
+                      type="password"
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs text-gray-700">
+                      siteId
+                      <input
+                        value={createEmpSiteId}
+                        onChange={(e) => setCreateEmpSiteId(e.target.value)}
+                        className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                        inputMode="numeric"
+                      />
+                    </label>
+
+                    <label className="text-xs text-gray-700">
+                      role
+                      <select
+                        value={createEmpRole}
+                        onChange={(e) =>
+                          setCreateEmpRole(e.target.value as EmployeeRole)
+                        }
+                        className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                      >
+                        <option value="EMPLOYEE">EMPLOYEE</option>
+                        <option value="MANAGER">MANAGER</option>
+                        <option value="ADMIN">ADMIN</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={async () => {
+                      const userIdNum = Number(createEmpUserId);
+                      const siteIdNum = Number(createEmpSiteId);
+
+                      if (!Number.isFinite(userIdNum)) {
+                        setFlashMessage('userId를 확인해 주세요.');
+                        return;
+                      }
+                      if (!createEmpUsername.trim()) {
+                        setFlashMessage('username은 필수입니다.');
+                        return;
+                      }
+                      if (!createEmpPassword.trim()) {
+                        setFlashMessage('password는 필수입니다.');
+                        return;
+                      }
+                      if (!Number.isFinite(siteIdNum)) {
+                        setFlashMessage('siteId를 확인해 주세요.');
+                        return;
+                      }
+
+                      setLoading(true);
+                      try {
+                        const body: AdminEmployeeCreateRequest = {
+                          userId: userIdNum,
+                          username: createEmpUsername.trim(),
+                          password: createEmpPassword.trim(),
+                          role: createEmpRole,
+                          siteId: siteIdNum,
+                        };
+                        await adminCreateEmployee(body);
+                        setCreateEmpUserId('');
+                        setCreateEmpUsername('');
+                        setCreateEmpPassword('');
+                        setCreateEmpSiteId('1');
+                        setCreateEmpRole('EMPLOYEE');
+                        await refreshEmployees();
+                        setFlashMessage('직원이 생성되었습니다.');
+                      } catch (e) {
+                        setFlashMessage(toUserMessage(e));
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    생성
+                  </button>
+
+                  <div className="text-[11px] text-gray-500">
+                    * 직원 생성은 ADMIN 전용입니다.
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold">직원 목록</h2>
               <button
@@ -470,6 +634,16 @@ export default function AdminSitesPage() {
                         <div className="text-sm">
                           <div className="font-medium">
                             #{x.userId} · {x.role}
+                            {(x as unknown as { username?: string })
+                              .username ? (
+                              <span className="ml-2 text-xs text-gray-600">
+                                @
+                                {
+                                  (x as unknown as { username?: string })
+                                    .username
+                                }
+                              </span>
+                            ) : null}
                           </div>
                           <div className="text-xs text-gray-600">
                             active: {String(x.active)} · siteId: {x.siteId}
@@ -530,17 +704,34 @@ export default function AdminSitesPage() {
                           </div>
 
                           <label className="text-xs text-gray-700">
+                            username
+                            <input
+                              value={editEmpUsername}
+                              onChange={(e) =>
+                                setEditEmpUsername(e.target.value)
+                              }
+                              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                              placeholder="username"
+                            />
+                          </label>
+
+                          <div className="text-[11px] text-gray-500">
+                            * username만 수정 가능합니다. (role은 수정하지 않음)
+                          </div>
+
+                          <label className="text-xs text-gray-700">
                             siteId
                             <input
                               value={editEmpSiteId}
                               onChange={(e) => setEditEmpSiteId(e.target.value)}
-                              className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                              className="mt-1 w-full rounded border px-3 py-2 text-sm disabled:opacity-50"
                               inputMode="numeric"
+                              disabled={!canEditEmployeeSiteId}
                             />
                           </label>
 
-                          {/* Assignments: target이 MANAGER일 때만 */}
-                          {isEditingManager && editingUserId != null && (
+                          {/* Assignments: target이 MANAGER일 때만(ADMIN 전용 UI) */}
+                          {showAssignmentsUi && (
                             <div className="rounded border bg-white p-3">
                               <div className="mb-2 flex items-center justify-between">
                                 <div className="text-sm font-semibold">
@@ -549,7 +740,7 @@ export default function AdminSitesPage() {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    refreshManagerAssignments(editingUserId)
+                                    refreshManagerAssignments(editingUserId!)
                                   }
                                   disabled={loading}
                                   className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
@@ -574,7 +765,7 @@ export default function AdminSitesPage() {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    assignManagerSite(editingUserId)
+                                    assignManagerSite(editingUserId!)
                                   }
                                   disabled={loading}
                                   className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
@@ -584,7 +775,7 @@ export default function AdminSitesPage() {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    removeManagerSite(editingUserId)
+                                    removeManagerSite(editingUserId!)
                                   }
                                   disabled={loading}
                                   className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"

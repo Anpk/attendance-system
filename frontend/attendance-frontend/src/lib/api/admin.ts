@@ -1,6 +1,7 @@
 import { apiFetch } from './client';
 import type {
   AdminEmployeeResponse,
+  AdminEmployeeCreateRequest,
   AdminEmployeeUpdateRequest,
   AdminManagerSiteAssignRequest,
   AdminSiteCreateRequest,
@@ -55,6 +56,16 @@ export async function adminUpdateSite(
 export async function adminListEmployees(): Promise<AdminEmployeeResponse[]> {
   const baseUrl = getBaseUrl();
   return apiFetch<AdminEmployeeResponse[]>(`${baseUrl}/api/admin/employees`);
+}
+
+export async function adminCreateEmployee(
+  body: AdminEmployeeCreateRequest
+): Promise<void> {
+  const baseUrl = getBaseUrl();
+  await apiFetch<void>(`${baseUrl}/api/admin/employees`, {
+    method: 'POST',
+    body,
+  });
 }
 
 export async function adminUpdateEmployee(
