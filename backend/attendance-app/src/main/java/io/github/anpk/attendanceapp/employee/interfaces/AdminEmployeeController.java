@@ -64,6 +64,13 @@ public class AdminEmployeeController {
         if (body.password() == null || body.password().trim().isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "password는 필수입니다.");
         }
+        if (body.role() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "role은 필수입니다.");
+        }
+        // 최소 안전장치: ADMIN 생성은 운영상 위험도가 커서 차단
+        if (body.role() == EmployeeRole.ADMIN) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+        }
         if (body.siteId() == null) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "siteId는 필수입니다.");
         }
@@ -78,7 +85,7 @@ public class AdminEmployeeController {
                 body.userId(),
                 body.username().trim(),
                 body.siteId(),
-                EmployeeRole.EMPLOYEE,
+                body.role(),
                 true,
                 body.password().trim()
         );
