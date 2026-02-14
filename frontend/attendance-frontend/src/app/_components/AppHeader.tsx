@@ -7,7 +7,8 @@ import { useAuth } from '@/app/context/AuthContext';
 /**
  * 공용 헤더(최소)
  * - 링크로 출/퇴근(/attendance), 월별 목록(/attendance/monthly), 정정(/corrections) 이동
- * - 임시 로그인 환경에서 role 확인/로그아웃 제공
+ * - 인증 상태에서 role 확인/로그아웃 제공
+ * - 관리자 메뉴는 /admin/sites(통합 페이지)로 단일 진입
  */
 export default function AppHeader() {
   const { user, ready, logout } = useAuth();
@@ -59,27 +60,10 @@ export default function AppHeader() {
                 href="/admin/sites"
                 className="rounded px-2 py-1 hover:bg-gray-100"
               >
-                관리자 · Sites
+                관리자
               </Link>
             )}
 
-          {ready && user && user.role === 'ADMIN' && (
-            <Link
-              href="/admin/employees"
-              className="rounded px-2 py-1 hover:bg-gray-100"
-            >
-              관리자 · 직원
-            </Link>
-          )}
-
-          {ready && user && user.role === 'ADMIN' && (
-            <Link
-              href="/admin/assignments"
-              className="rounded px-2 py-1 hover:bg-gray-100"
-            >
-              관리자 · 담당Site
-            </Link>
-          )}
           {ready && user && (
             <button
               type="button"
