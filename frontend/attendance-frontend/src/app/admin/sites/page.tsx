@@ -72,11 +72,7 @@ export default function AdminSitesPage() {
     editingUserId != null &&
     editingEmpRole === 'MANAGER';
 
-  // ---------- Assignments (for MANAGER target only) ----------
-  const isEditingManager = useMemo(() => {
-    return editingUserId != null && editingEmpRole === 'MANAGER';
-  }, [editingUserId, editingEmpRole]);
-
+  // ---------- Assignments (ADMIN 전용 / target=MANAGER일 때만) ----------
   const [mgrAssignedSiteIds, setMgrAssignedSiteIds] = useState<number[]>([]);
   const [mgrSiteIdInput, setMgrSiteIdInput] = useState<string>('1');
 
@@ -195,6 +191,9 @@ export default function AdminSitesPage() {
   function cancelEditEmployee() {
     setEditingUserId(null);
     setEditEmpUsername('');
+    // assignments UI 상태도 함께 초기화(ADMIN만 의미 있음)
+    setMgrAssignedSiteIds([]);
+    setMgrSiteIdInput('1');
   }
 
   async function submitUpdateEmployee(targetUserId: number) {
@@ -307,16 +306,16 @@ export default function AdminSitesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, ready, user, forbidden]);
 
-  // manager 대상 편집 진입 시 할당 목록 로드
+  // target=MANAGER 편집 진입 시 할당 목록 로드(ADMIN 전용 UI일 때만)
   useEffect(() => {
     if (!ready) return;
     if (!user) return;
     if (forbidden) return;
-    if (!isEditingManager) return;
+    if (!showAssignmentsUi) return;
     if (editingUserId == null) return;
     refreshManagerAssignments(editingUserId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditingManager, editingUserId, ready, user, forbidden]);
+  }, [showAssignmentsUi, editingUserId, ready, user, forbidden]);
 
   return (
     <div className="min-h-screen bg-gray-50">

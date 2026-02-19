@@ -7,7 +7,6 @@ import io.github.anpk.attendanceapp.employee.infrastructure.repository.EmployeeR
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.error.ErrorCode;
 import io.github.anpk.attendanceapp.site.domain.model.Site;
-import io.github.anpk.attendanceapp.site.infrastructure.repository.ManagerSiteAssignmentRepository;
 import io.github.anpk.attendanceapp.site.infrastructure.repository.SiteRepository;
 import io.github.anpk.attendanceapp.site.interfaces.dto.AdminSiteCreateRequest;
 import io.github.anpk.attendanceapp.site.interfaces.dto.AdminSiteResponse;
