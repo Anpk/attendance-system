@@ -10,6 +10,7 @@ import io.github.anpk.attendanceapp.employee.interfaces.dto.AdminEmployeeRespons
 import io.github.anpk.attendanceapp.employee.interfaces.dto.AdminEmployeeUpdateRequest;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.error.ErrorCode;
+import io.github.anpk.attendanceapp.site.infrastructure.repository.ManagerSiteAssignmentRepository;
 import io.github.anpk.attendanceapp.site.infrastructure.repository.SiteRepository;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,11 +22,13 @@ public class AdminEmployeeController {
 
     private final EmployeeRepository employeeRepository;
     private final SiteRepository siteRepository;
+    private final ManagerSiteAssignmentRepository managerSiteAssignmentRepository;
     private final AdminGuard adminGuard;
 
-    public AdminEmployeeController(EmployeeRepository employeeRepository, SiteRepository siteRepository, AdminGuard adminGuard) {
+    public AdminEmployeeController(EmployeeRepository employeeRepository, SiteRepository siteRepository, ManagerSiteAssignmentRepository managerSiteAssignmentRepository, AdminGuard adminGuard) {
         this.employeeRepository = employeeRepository;
         this.siteRepository = siteRepository;
+        this.managerSiteAssignmentRepository = managerSiteAssignmentRepository;
         this.adminGuard = adminGuard;
     }
 
@@ -39,12 +42,12 @@ public class AdminEmployeeController {
                     .toList();
         }
 
-        // MANAGER: 자기 소속 site 한정
-        var me = employeeRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
-
-        // MANAGER: "자기 site의 ROLE=EMPLOYEE"만 노출 (수정 가능 스코프와 정합)
-        return employeeRepository.findAllBySiteIdAndRole(me.getSiteId(), EmployeeRole.EMPLOYEE).stream()
+        // MANAGER: assignments 범위의 ROLE=EMPLOYEE만 노출
+        var manageableSiteIds = managerSiteAssignmentRepository.findSiteIdsByManagerUserId(userId);
+        if (manageableSiteIds.isEmpty()) {
+            return List.of();
+        }
+        return employeeRepository.findAllBySiteIdInAndRole(manageableSiteIds, EmployeeRole.EMPLOYEE).stream()
                 .map(e -> new AdminEmployeeResponse(e.getUserId(), e.getUsername(), e.isActive(), e.getRole(), e.getSiteId()))
                 .toList();
     }
@@ -111,18 +114,20 @@ public class AdminEmployeeController {
                 .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND, "직원을 찾을 수 없습니다."));
 
         if (role == EmployeeRole.MANAGER) {
-            // MANAGER: 자기 site의 EMPLOYEE만 수정 가능
-            var me = employeeRepository.findById(userId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
-
-            if (!me.getSiteId().equals(emp.getSiteId())) {
-                throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
-            }
+            // MANAGER: assignments 범위의 EMPLOYEE만 수정 가능
             if (emp.getRole() != EmployeeRole.EMPLOYEE) {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
             }
-            // MANAGER는 siteId 변경 불가
-            if (body.siteId() != null) {
+            var manageableSiteIds = managerSiteAssignmentRepository.findSiteIdsByManagerUserId(userId);
+            if (manageableSiteIds.isEmpty()) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+            }
+            // 대상 직원의 "현재 siteId"가 관리 범위 내여야 함
+            if (!manageableSiteIds.contains(emp.getSiteId())) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+            }
+            // 옵션 A: siteId 변경을 요청한 경우, 변경 후 siteId도 관리 범위 내여야 함
+            if (body.siteId() != null && !manageableSiteIds.contains(body.siteId())) {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
             }
         }

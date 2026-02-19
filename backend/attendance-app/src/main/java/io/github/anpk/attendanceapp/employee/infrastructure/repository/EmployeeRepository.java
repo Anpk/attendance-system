@@ -14,6 +14,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
     List<Employee> findAllBySiteIdAndRole(Long siteId, EmployeeRole role);
 
+    List<Employee> findAllBySiteIdInAndRole(List<Long> siteIds, EmployeeRole role);
+
     @Query("select e.userId from Employee e where e.siteId = :siteId and e.active = true")
     List<Long> findActiveUserIdsBySiteId(@Param("siteId") Long siteId);
 }
