@@ -123,7 +123,12 @@ export default function LoginPage() {
       login(parsed, res.accessToken);
 
       const next = getSafeNext();
-      router.replace(next ?? '/attendance');
+
+      // 기본 랜딩: ADMIN은 월별 근태 목록으로, 그 외는 출/퇴근으로
+      const defaultAfterLogin =
+        parsed.role === 'ADMIN' ? '/attendance/monthly' : '/attendance';
+
+      router.replace(next ?? defaultAfterLogin);
     } catch (e) {
       setMessage(toUserMessage(e));
     }

@@ -14,6 +14,10 @@ public class Employee {
     @Column(name = "user_id")
     private Long userId;
 
+    // ✅ 표시/관리용 사용자명(ADMIN/MANAGER 화면에서 수정 대상)
+    @Column(nullable = false, length = 50)
+    private String username;
+
     @Column(name = "site_id", nullable = false)
     private Long siteId;
 
@@ -30,6 +34,16 @@ public class Employee {
 
     protected Employee() {}
 
+    // ✅ 직원 생성(ADMIN)용 최소 생성자
+    public Employee(Long userId, String username, Long siteId, EmployeeRole role, boolean active, String password) {
+        this.userId = userId;
+        this.username = username;
+        this.siteId = siteId;
+        this.role = role;
+        this.active = active;
+        this.password = password;
+    }
+
     // ✅ Admin 최소 관리용 도메인 메서드 (setter 노출 최소화)
     public void changeActive(boolean active) {
         this.active = active;
@@ -43,7 +57,12 @@ public class Employee {
         this.siteId = siteId;
     }
 
+    public void changeUsername(String username) {
+        this.username = username;
+    }
+
     public Long getUserId() { return userId; }
+    public String getUsername() { return username; }
     public Long getSiteId() { return siteId; }
     public EmployeeRole getRole() { return role; }
     public boolean isActive() { return active; }

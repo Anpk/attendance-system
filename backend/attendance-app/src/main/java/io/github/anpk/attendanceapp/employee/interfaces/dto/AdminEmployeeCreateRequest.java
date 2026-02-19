@@ -2,10 +2,11 @@ package io.github.anpk.attendanceapp.employee.interfaces.dto;
 
 import io.github.anpk.attendanceapp.employee.domain.model.EmployeeRole;
 
-public record AdminEmployeeResponse(
+public record AdminEmployeeCreateRequest(
         Long userId,
         String username,
-        boolean active,
+        String password,
         EmployeeRole role,
         Long siteId
+
 ) {}

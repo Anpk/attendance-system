@@ -9,6 +9,8 @@ import java.util.List;
 
 public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
+    List<Employee> findAllBySiteId(Long siteId);
+
     @Query("select e.userId from Employee e where e.siteId = :siteId and e.active = true")
     List<Long> findActiveUserIdsBySiteId(@Param("siteId") Long siteId);
 }

@@ -7,7 +7,6 @@ import io.github.anpk.attendanceapp.employee.infrastructure.repository.EmployeeR
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.error.ErrorCode;
 import io.github.anpk.attendanceapp.site.domain.model.Site;
-import io.github.anpk.attendanceapp.site.infrastructure.repository.ManagerSiteAssignmentRepository;
 import io.github.anpk.attendanceapp.site.infrastructure.repository.SiteRepository;
 import io.github.anpk.attendanceapp.site.interfaces.dto.AdminSiteCreateRequest;
 import io.github.anpk.attendanceapp.site.interfaces.dto.AdminSiteResponse;
@@ -21,12 +20,12 @@ import java.util.List;
 public class AdminSiteController {
 
     private final SiteRepository siteRepository;
-    private final ManagerSiteAssignmentRepository managerSiteAssignmentRepository;
+    private final EmployeeRepository employeeRepository;
     private final AdminGuard adminGuard;
 
-    public AdminSiteController(SiteRepository siteRepository, ManagerSiteAssignmentRepository managerSiteAssignmentRepository, AdminGuard adminGuard) {
+    public AdminSiteController(SiteRepository siteRepository, EmployeeRepository employeeRepository, AdminGuard adminGuard) {
         this.siteRepository = siteRepository;
-        this.managerSiteAssignmentRepository = managerSiteAssignmentRepository;
+        this.employeeRepository = employeeRepository;
         this.adminGuard = adminGuard;
     }
 
@@ -39,9 +38,11 @@ public class AdminSiteController {
                     .toList();
         }
 
-        // MANAGER: 담당 site만
-        var siteIds = managerSiteAssignmentRepository.findSiteIdsByManagerUserId(userId);
-        return siteRepository.findAllById(siteIds).stream()
+        // MANAGER: 자기 소속 site만
+        var me = employeeRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
+
+        return siteRepository.findById(me.getSiteId()).stream()
                 .map(s -> new AdminSiteResponse(s.getId(), s.getName(), s.isActive()))
                 .toList();
     }
@@ -64,8 +65,10 @@ public class AdminSiteController {
     ) {
         var role = adminGuard.requireAdminOrManager(userId);
         if (role == EmployeeRole.MANAGER) {
-            // MANAGER: 담당 범위(site) 제한
-            if (!managerSiteAssignmentRepository.existsByManagerUserIdAndSiteId(userId, siteId)) {
+            // MANAGER: 자기 소속 site만 수정 가능
+            var me = employeeRepository.findById(userId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
+            if (!me.getSiteId().equals(siteId)) {
                 throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
             }
         }
