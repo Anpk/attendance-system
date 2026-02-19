@@ -43,7 +43,8 @@ public class AdminEmployeeController {
         var me = employeeRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
 
-        return employeeRepository.findAllBySiteId(me.getSiteId()).stream()
+        // MANAGER: "자기 site의 ROLE=EMPLOYEE"만 노출 (수정 가능 스코프와 정합)
+        return employeeRepository.findAllBySiteIdAndRole(me.getSiteId(), EmployeeRole.EMPLOYEE).stream()
                 .map(e -> new AdminEmployeeResponse(e.getUserId(), e.getUsername(), e.isActive(), e.getRole(), e.getSiteId()))
                 .toList();
     }
