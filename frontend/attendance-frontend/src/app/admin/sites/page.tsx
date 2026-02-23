@@ -847,8 +847,17 @@ export default function AdminSitesPage() {
               <ul className="space-y-2">
                 {filteredEmployees.map((x) => {
                   const isEditing = editingUserId === x.userId;
+
+                  // ✅ Quick active toggle guard
+                  const isSelf = user?.userId === x.userId;
+                  const isEmployee = x.role === 'EMPLOYEE';
+                  const canQuickToggle = !isSelf && isEmployee;
+
                   return (
-                    <li key={x.userId} className="rounded border p-3">
+                    <li
+                      key={x.userId}
+                      className={`rounded border p-3 ${x.active ? '' : 'bg-gray-100 border-gray-300'}`}
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm">
                           <div className="font-medium">
@@ -866,21 +875,36 @@ export default function AdminSitesPage() {
                           </div>
                           <div className="text-xs text-gray-600">
                             active: {String(x.active)} · siteId: {x.siteId}
+                            {!x.active ? (
+                              <span className="ml-2 rounded bg-gray-100 px-2 py-0.5 text-[11px]">
+                                비활성
+                              </span>
+                            ) : null}
                           </div>
                         </div>
 
                         {!isEditing ? (
                           <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                submitToggleActiveQuick(x.userId, !x.active)
-                              }
-                              disabled={pendingActiveUserId === x.userId}
-                              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                            >
-                              {x.active ? '비활성' : '활성'}
-                            </button>
+                            {canQuickToggle ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // 비활성화 시에만 확인(운영 사고 방지)
+                                  if (x.active) {
+                                    const ok = window.confirm(
+                                      `직원(#${x.userId})을 비활성화할까요?`
+                                    );
+                                    if (!ok) return;
+                                  }
+                                  submitToggleActiveQuick(x.userId, !x.active);
+                                }}
+                                disabled={pendingActiveUserId === x.userId}
+                                className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+                              >
+                                {x.active ? '비활성' : '활성'}
+                              </button>
+                            ) : null}
+
                             <button
                               type="button"
                               onClick={() => startEditEmployee(x)}
