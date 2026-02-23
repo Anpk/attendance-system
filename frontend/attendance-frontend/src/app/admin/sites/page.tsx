@@ -1,6 +1,8 @@
 'use client';
 
 import AppHeader from '@/app/_components/AppHeader';
+import SitesTab from './_components/SitesTab';
+import EmployeesTab from './_components/EmployeesTab';
 import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
 import { toUserMessage } from '@/lib/api/error-messages';
 import type {
@@ -133,9 +135,6 @@ export default function AdminSitesPage() {
     return { toAdd, toRemove };
   }, [mgrAssignedSiteIds, mgrSelectedSiteIds]);
 
-  // (legacy) 기존 단일 입력 변수는 남겨두되 UI에서는 사용하지 않음
-  const [mgrSiteIdInput, setMgrSiteIdInput] = useState<string>('1');
-
   function setTabAndSync(next: TabKey) {
     setTab(next);
     const url = `/admin/sites?tab=${next}`;
@@ -244,7 +243,6 @@ export default function AdminSitesPage() {
     // assignments는 ADMIN에서만 편집(UI 노출)하므로 초기화도 ADMIN에서만
     if (user?.role === 'ADMIN') {
       setMgrAssignedSiteIds([]);
-      setMgrSiteIdInput(String(x.siteId));
       setIsAssignmentsOpen(false);
       setMgrSelectedSiteIds([]);
     }
@@ -255,7 +253,6 @@ export default function AdminSitesPage() {
     setEditEmpUsername('');
     // assignments UI 상태도 함께 초기화(ADMIN만 의미 있음)
     setMgrAssignedSiteIds([]);
-    setMgrSiteIdInput('1');
     setIsAssignmentsOpen(false);
     setMgrSelectedSiteIds([]);
   }
@@ -564,66 +561,6 @@ export default function AdminSitesPage() {
     }
   }
 
-  async function assignManagerSite(managerUserId: number) {
-    if (user?.role !== 'ADMIN') {
-      setFlashMessage('권한이 없습니다.');
-      return;
-    }
-    if (mgrSelectedSiteIds.length === 0) {
-      setFlashMessage('할당할 site를 선택해 주세요.');
-      return;
-    }
-
-    // 비활성 site는 선택 단계에서 disabled 처리되지만, 방어적으로 한번 더 체크
-    const inactive = mgrSelectedSiteIds.find((id) => {
-      const s = sites.find((x) => x.siteId === id);
-      return s ? !s.active : false;
-    });
-    if (inactive != null) {
-      setFlashMessage('비활성 site는 할당할 수 없습니다.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      for (const siteId of mgrSelectedSiteIds) {
-        await adminAssignManagerSite({ managerUserId, siteId });
-      }
-      setFlashMessage('할당 완료');
-      await refreshManagerAssignments(managerUserId);
-      setMgrSelectedSiteIds([]);
-    } catch (e) {
-      setFlashMessage(toUserMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function removeManagerSite(managerUserId: number) {
-    if (user?.role !== 'ADMIN') {
-      setFlashMessage('권한이 없습니다.');
-      return;
-    }
-    if (mgrSelectedSiteIds.length === 0) {
-      setFlashMessage('해제할 site를 선택해 주세요.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      for (const siteId of mgrSelectedSiteIds) {
-        await adminRemoveManagerSite(managerUserId, siteId);
-      }
-      setFlashMessage('해제 완료');
-      await refreshManagerAssignments(managerUserId);
-      setMgrSelectedSiteIds([]);
-    } catch (e) {
-      setFlashMessage(toUserMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function applyManagerAssignments(managerUserId: number) {
     if (user?.role !== 'ADMIN') {
       setFlashMessage('권한이 없습니다.');
@@ -745,834 +682,86 @@ export default function AdminSitesPage() {
             TAB: SITES
         ------------------------ */}
         {tab === 'sites' && (
-          <>
-            {/* Create (ADMIN only) */}
-            {user?.role === 'ADMIN' && (
-              <section className="mb-6 rounded border bg-white p-4">
-                <h2 className="mb-3 text-sm font-semibold">Site 생성</h2>
-                <div className="flex gap-2">
-                  <input
-                    value={createName}
-                    onChange={(e) => setCreateName(e.target.value)}
-                    placeholder="Site name"
-                    className="flex-1 rounded border px-3 py-2 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={submitCreateSite}
-                    disabled={loading}
-                    className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    생성
-                  </button>
-                </div>
-              </section>
-            )}
-
-            <section className="rounded border bg-white p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold">Site 목록</h2>
-                <button
-                  type="button"
-                  onClick={refreshSites}
-                  disabled={loading}
-                  className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                >
-                  새로고침
-                </button>
-              </div>
-
-              {sites.length === 0 ? (
-                <div className="text-sm text-gray-600">
-                  표시할 site가 없습니다.
-                </div>
-              ) : (
-                <ul className="space-y-2">
-                  {sites.map((s) => {
-                    const isEditing = editingSiteId === s.siteId;
-                    return (
-                      <li key={s.siteId} className="rounded border p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm">
-                            <div className="font-medium">
-                              #{s.siteId} · {s.name}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              active: {String(s.active)}
-                            </div>
-                          </div>
-
-                          {!isEditing ? (
-                            <button
-                              type="button"
-                              onClick={() => startEditSite(s)}
-                              className="rounded border px-3 py-1 text-xs hover:bg-gray-50"
-                            >
-                              수정
-                            </button>
-                          ) : (
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => submitUpdateSite(s.siteId)}
-                                disabled={loading}
-                                className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                              >
-                                저장
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelEditSite}
-                                disabled={loading}
-                                className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                              >
-                                취소
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        {isEditing && (
-                          <div className="mt-3 grid gap-2">
-                            <label className="text-xs text-gray-700">
-                              name
-                              <input
-                                value={editSiteName}
-                                onChange={(e) =>
-                                  setEditSiteName(e.target.value)
-                                }
-                                className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                              />
-                            </label>
-                            <label className="flex items-center gap-2 text-xs text-gray-700">
-                              <input
-                                type="checkbox"
-                                checked={editSiteActive}
-                                onChange={(e) =>
-                                  setEditSiteActive(e.target.checked)
-                                }
-                              />
-                              active
-                            </label>
-                            <div className="text-xs text-gray-500">
-                              * MANAGER는 담당 site만 수정 가능(권한은 서버에서
-                              검증)
-                            </div>
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          </>
+          <SitesTab
+            userRole={user?.role}
+            loading={loading}
+            sites={sites}
+            createName={createName}
+            setCreateName={setCreateName}
+            submitCreateSite={submitCreateSite}
+            refreshSites={refreshSites}
+            editingSiteId={editingSiteId}
+            startEditSite={startEditSite}
+            cancelEditSite={cancelEditSite}
+            editSiteName={editSiteName}
+            setEditSiteName={setEditSiteName}
+            editSiteActive={editSiteActive}
+            setEditSiteActive={setEditSiteActive}
+            submitUpdateSite={submitUpdateSite}
+          />
         )}
 
         {/* -----------------------
             TAB: EMPLOYEES
         ------------------------ */}
         {tab === 'employees' && (
-          <section className="rounded border bg-white p-4">
-            {canCreateEmployee && (
-              <div className="mb-6 rounded border bg-white p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="text-sm font-semibold">직원 생성</div>
-                  <button
-                    type="button"
-                    onClick={() => setIsCreateEmployeeOpen((v) => !v)}
-                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
-                  >
-                    {isCreateEmployeeOpen ? '접기' : '펼치기'}
-                  </button>
-                </div>
-
-                {!isCreateEmployeeOpen ? (
-                  <div className="text-xs text-gray-600">
-                    * 필요 시 펼쳐서 신규 직원을 생성하세요. (ADMIN 전용)
-                  </div>
-                ) : (
-                  <form
-                    className="grid gap-2"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (loading) return;
-                      void submitCreateEmployee();
-                    }}
-                  >
-                    <label className="text-xs text-gray-700">
-                      userId
-                      <input
-                        ref={createEmpUserIdRef}
-                        value={createEmpUserId}
-                        onChange={(e) => setCreateEmpUserId(e.target.value)}
-                        className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                        inputMode="numeric"
-                        placeholder="예: 200"
-                        disabled={loading}
-                      />
-                    </label>
-
-                    <label className="text-xs text-gray-700">
-                      username
-                      <input
-                        value={createEmpUsername}
-                        onChange={(e) => setCreateEmpUsername(e.target.value)}
-                        className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                        placeholder="예: user-200"
-                        disabled={loading}
-                      />
-                    </label>
-
-                    <label className="text-xs text-gray-700">
-                      password
-                      <input
-                        value={createEmpPassword}
-                        onChange={(e) => setCreateEmpPassword(e.target.value)}
-                        className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                        placeholder="예: pw200"
-                        type="password"
-                        disabled={loading}
-                      />
-                    </label>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="text-xs text-gray-700">
-                        siteId
-                        <select
-                          value={createEmpSiteId}
-                          onChange={(e) => setCreateEmpSiteId(e.target.value)}
-                          className="mt-1 w-full rounded border px-3 py-2 text-sm disabled:opacity-50"
-                          disabled={loading || sites.length === 0}
-                        >
-                          {sites.length === 0 ? (
-                            <option value={createEmpSiteId}>
-                              site 목록 로딩중...
-                            </option>
-                          ) : (
-                            sites.map((s) => (
-                              <option
-                                key={s.siteId}
-                                value={String(s.siteId)}
-                                disabled={!s.active}
-                              >
-                                #{s.siteId} · {s.name}
-                                {s.active ? '' : ' (inactive)'}
-                              </option>
-                            ))
-                          )}
-                        </select>
-                        <div className="mt-1 text-[11px] text-gray-500">
-                          * siteId는 선택 방식으로만 지정됩니다.
-                        </div>
-                        {(() => {
-                          const sid = Number(createEmpSiteId);
-                          const s = sites.find((x) => x.siteId === sid);
-                          if (!s) return null;
-                          if (s.active) return null;
-                          return (
-                            <div className="mt-1 text-[11px] text-red-600">
-                              * 비활성 site는 선택할 수 없습니다.
-                            </div>
-                          );
-                        })()}
-                      </label>
-
-                      <label className="text-xs text-gray-700">
-                        role
-                        <select
-                          value={createEmpRole}
-                          onChange={(e) =>
-                            setCreateEmpRole(e.target.value as EmployeeRole)
-                          }
-                          className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                          disabled={loading}
-                        >
-                          <option value="EMPLOYEE">EMPLOYEE</option>
-                          <option value="MANAGER">MANAGER</option>
-                        </select>
-                      </label>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      {loading ? '생성 중…' : '생성'}
-                    </button>
-
-                    <div className="text-[11px] text-gray-500">
-                      * 직원 생성은 ADMIN 전용입니다.
-                    </div>
-                  </form>
-                )}
-              </div>
-            )}
-
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">직원 목록</h2>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-700">
-                  site 필터
-                  <select
-                    value={empFilterSiteId}
-                    onChange={(e) => setEmpFilterSiteId(e.target.value)}
-                    className="ml-2 rounded border px-2 py-1 text-xs"
-                    disabled={sites.length === 0}
-                  >
-                    <option value="">전체</option>
-                    {sites.map((s) => (
-                      <option key={s.siteId} value={String(s.siteId)}>
-                        #{s.siteId} · {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  onClick={refreshEmployees}
-                  disabled={loading}
-                  className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                >
-                  새로고침
-                </button>
-              </div>
-            </div>
-
-            {(user?.role === 'MANAGER' || user?.role === 'ADMIN') && (
-              <div className="mb-3 rounded border bg-white p-3">
-                <div className="mb-2 text-sm font-semibold">
-                  직원 일괄 site 이동
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="text-xs text-gray-700">
-                    대상 site
-                    <select
-                      value={bulkTargetSiteId}
-                      onChange={(e) => setBulkTargetSiteId(e.target.value)}
-                      className="ml-2 rounded border px-2 py-1 text-xs disabled:opacity-50"
-                      disabled={sites.length === 0 || bulkMoving}
-                    >
-                      <option value="">선택</option>
-                      {sites.map((s) => (
-                        <option
-                          key={s.siteId}
-                          value={String(s.siteId)}
-                          disabled={!s.active}
-                        >
-                          #{s.siteId} · {s.name}
-                          {s.active ? '' : ' (inactive)'}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <div className="text-[11px] text-gray-700">
-                    선택: {bulkSelectedUserIds.length}명
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const ids = bulkSelectableInView.map((e) => e.userId);
-                      setBulkSelectedUserIds(ids);
-                    }}
-                    disabled={bulkMoving || bulkSelectableInView.length === 0}
-                    className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    전체 선택(현재 필터)
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void submitBulkMoveEmployees()}
-                    disabled={bulkMoving || bulkSelectedUserIds.length === 0}
-                    className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    일괄 이동
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setBulkSelectedUserIds([])}
-                    disabled={bulkMoving || bulkSelectedUserIds.length === 0}
-                    className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    선택 해제
-                  </button>
-
-                  <div className="text-[11px] text-gray-500">
-                    * 목록에서 EMPLOYEE만 선택할 수 있습니다. (MANAGER는
-                    서버에서 담당(assignments) 범위로 추가 검증)
-                  </div>
-                  {bulkSelectedEmployees.length > 0 ? (
-                    <div className="mt-2 text-[11px] text-gray-600">
-                      선택된 직원:{' '}
-                      {bulkSelectedEmployees
-                        .slice(0, 10)
-                        .map((e) => `#${e.userId}`)
-                        .join(', ')}
-                      {bulkSelectedEmployees.length > 10
-                        ? ` 외 ${bulkSelectedEmployees.length - 10}명`
-                        : ''}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            )}
-
-            {filteredEmployees.length === 0 ? (
-              <div className="text-sm text-gray-600">
-                표시할 직원이 없습니다.
-              </div>
-            ) : (
-              <ul className="space-y-2">
-                {filteredEmployees.map((x) => {
-                  const isEditing = editingUserId === x.userId;
-
-                  // ✅ Quick active toggle guard
-                  const isSelf = user?.userId === x.userId;
-                  const isEmployee = x.role === 'EMPLOYEE';
-                  const canQuickToggle = !isSelf && isEmployee;
-
-                  return (
-                    <li
-                      key={x.userId}
-                      className={`rounded border p-3 ${x.active ? '' : 'bg-gray-100 border-gray-300'}`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            className="mt-1"
-                            disabled={
-                              x.role !== 'EMPLOYEE' ||
-                              user?.userId === x.userId ||
-                              bulkMoving
-                            }
-                            checked={bulkSelectedUserIds.includes(x.userId)}
-                            onChange={(e) => {
-                              const next = e.target.checked;
-                              setBulkSelectedUserIds((prev) => {
-                                if (next) {
-                                  return prev.includes(x.userId)
-                                    ? prev
-                                    : [...prev, x.userId];
-                                }
-                                return prev.filter((id) => id !== x.userId);
-                              });
-                            }}
-                          />
-                          <div className="text-sm">
-                            <div className="font-medium">
-                              #{x.userId} · {x.role}
-                              {(x as unknown as { username?: string })
-                                .username ? (
-                                <span className="ml-2 text-xs text-gray-600">
-                                  @
-                                  {
-                                    (x as unknown as { username?: string })
-                                      .username
-                                  }
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                              active: {String(x.active)} · siteId: {x.siteId}
-                              {!x.active ? (
-                                <span className="ml-2 rounded bg-gray-100 px-2 py-0.5 text-[11px]">
-                                  비활성
-                                </span>
-                              ) : null}
-                            </div>
-                          </div>
-                        </div>
-
-                        {!isEditing ? (
-                          <div className="flex gap-2">
-                            {canQuickToggle ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  // 비활성화 시에만 확인(운영 사고 방지)
-                                  if (x.active) {
-                                    const ok = window.confirm(
-                                      `직원(#${x.userId})을 비활성화할까요?`
-                                    );
-                                    if (!ok) return;
-                                  }
-                                  submitToggleActiveQuick(x.userId, !x.active);
-                                }}
-                                disabled={pendingActiveUserId === x.userId}
-                                className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                              >
-                                {x.active ? '비활성' : '활성'}
-                              </button>
-                            ) : null}
-
-                            <button
-                              type="button"
-                              onClick={() => startEditEmployee(x)}
-                              className="rounded border px-3 py-1 text-xs hover:bg-gray-50"
-                            >
-                              수정
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => submitUpdateEmployee(x.userId)}
-                              disabled={loading}
-                              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                            >
-                              저장
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelEditEmployee}
-                              disabled={loading}
-                              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                            >
-                              취소
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {isEditing && (
-                        <div className="mt-3 grid gap-3">
-                          <label className="flex items-center gap-2 text-xs text-gray-700">
-                            <input
-                              type="checkbox"
-                              checked={editEmpActive}
-                              onChange={(e) =>
-                                setEditEmpActive(e.target.checked)
-                              }
-                            />
-                            active
-                          </label>
-
-                          <div className="text-xs text-gray-700">
-                            role
-                            <div className="mt-1 rounded border bg-gray-50 px-3 py-2 text-sm">
-                              {editingEmpRole}
-                            </div>
-                            <div className="mt-1 text-[11px] text-gray-500">
-                              * role은 이번 통합 UX에서 수정하지 않습니다.
-                            </div>
-                          </div>
-
-                          <label className="text-xs text-gray-700">
-                            username
-                            <input
-                              value={editEmpUsername}
-                              onChange={(e) =>
-                                setEditEmpUsername(e.target.value)
-                              }
-                              className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                              placeholder="username"
-                            />
-                          </label>
-
-                          <div className="text-[11px] text-gray-500">
-                            * username만 수정 가능합니다. (role은 수정하지 않음)
-                          </div>
-
-                          <label className="text-xs text-gray-700">
-                            siteId
-                            <select
-                              value={editEmpSiteId}
-                              onChange={(e) => setEditEmpSiteId(e.target.value)}
-                              className="mt-1 w-full rounded border px-3 py-2 text-sm disabled:opacity-50"
-                              disabled={
-                                !canEditEmployeeSiteId || sites.length === 0
-                              }
-                            >
-                              {sites.length === 0 ? (
-                                <option value={editEmpSiteId}>
-                                  site 목록 로딩중...
-                                </option>
-                              ) : (
-                                sites.map((s) => (
-                                  <option
-                                    key={s.siteId}
-                                    value={String(s.siteId)}
-                                    disabled={!s.active}
-                                  >
-                                    #{s.siteId} · {s.name}
-                                    {s.active ? '' : ' (inactive)'}
-                                  </option>
-                                ))
-                              )}
-                            </select>
-                            <div className="mt-1 text-[11px] text-gray-500">
-                              * siteId는 선택 방식으로만 변경됩니다.
-                              {user?.role === 'MANAGER'
-                                ? ' (MANAGER는 담당(assignments) site 범위 내에서만 선택 가능)'
-                                : ''}
-                            </div>
-                            {(() => {
-                              const sid = Number(editEmpSiteId);
-                              const s = sites.find((x) => x.siteId === sid);
-                              if (!s) return null;
-                              if (s.active) return null;
-                              return (
-                                <div className="mt-1 text-[11px] text-red-600">
-                                  * 비활성 site로는 변경할 수 없습니다.
-                                </div>
-                              );
-                            })()}
-                          </label>
-
-                          {/* Assignments: target이 MANAGER일 때만(ADMIN 전용 UI) */}
-                          {showAssignmentsUi && (
-                            <div className="rounded border bg-white p-3">
-                              <div className="mb-2 flex items-center justify-between">
-                                <div className="text-sm font-semibold">
-                                  담당 Site(Assignments)
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setIsAssignmentsOpen((v) => !v)
-                                  }
-                                  className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
-                                >
-                                  {isAssignmentsOpen ? '접기' : '펼치기'}
-                                </button>
-                              </div>
-
-                              {/* 1) 현재 담당 siteId를 상단에 */}
-                              <div className="mb-3">
-                                <div className="mb-1 text-xs font-semibold">
-                                  현재 담당 siteId
-                                </div>
-                                {mgrAssignedSiteIds.length === 0 ? (
-                                  <div className="text-sm text-gray-600">
-                                    없음
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-wrap gap-2">
-                                    {mgrAssignedSiteIds.map((id) => (
-                                      <span
-                                        key={id}
-                                        className="rounded bg-gray-100 px-2 py-1 text-xs"
-                                      >
-                                        {id}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              {!isAssignmentsOpen ? null : (
-                                <>
-                                  <div className="mb-2 flex items-center justify-between">
-                                    <div className="text-xs text-gray-700">
-                                      변경할 site 선택(복수)
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <input
-                                        value={mgrSiteQuery}
-                                        onChange={(e) =>
-                                          setMgrSiteQuery(e.target.value)
-                                        }
-                                        placeholder="site 검색(ID/이름)"
-                                        className="rounded border px-2 py-1 text-xs"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          refreshManagerAssignments(
-                                            editingUserId!
-                                          )
-                                        }
-                                        disabled={loading}
-                                        className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                                      >
-                                        새로고침
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  {/* 2) select 대신 체크박스로 복수 선택 */}
-                                  {sites.length === 0 ? (
-                                    <div className="text-sm text-gray-600">
-                                      site 목록 로딩중...
-                                    </div>
-                                  ) : (
-                                    <div className="max-h-40 overflow-auto rounded border p-2">
-                                      <div className="grid gap-2">
-                                        {(() => {
-                                          const q = mgrSiteQuery
-                                            .trim()
-                                            .toLowerCase();
-                                          const list =
-                                            q.length === 0
-                                              ? sites
-                                              : sites.filter((s) => {
-                                                  const name =
-                                                    s.name.toLowerCase();
-                                                  return (
-                                                    String(s.siteId).includes(
-                                                      q
-                                                    ) || name.includes(q)
-                                                  );
-                                                });
-
-                                          return list.map((s) => {
-                                            const checked =
-                                              mgrSelectedSiteIds.includes(
-                                                s.siteId
-                                              );
-                                            // inactive라도 이미 선택된 것은 해제 가능
-                                            const disabled =
-                                              !s.active && !checked;
-
-                                            return (
-                                              <label
-                                                key={s.siteId}
-                                                className={`flex items-center gap-2 text-xs ${
-                                                  disabled
-                                                    ? 'text-gray-400'
-                                                    : 'text-gray-700'
-                                                }`}
-                                              >
-                                                <input
-                                                  type="checkbox"
-                                                  disabled={disabled}
-                                                  checked={checked}
-                                                  onChange={(e) => {
-                                                    const next =
-                                                      e.target.checked;
-                                                    setMgrSelectedSiteIds(
-                                                      (prev) => {
-                                                        if (next) {
-                                                          return prev.includes(
-                                                            s.siteId
-                                                          )
-                                                            ? prev
-                                                            : [
-                                                                ...prev,
-                                                                s.siteId,
-                                                              ];
-                                                        }
-                                                        return prev.filter(
-                                                          (x) => x !== s.siteId
-                                                        );
-                                                      }
-                                                    );
-                                                  }}
-                                                />
-                                                <span>
-                                                  #{s.siteId} · {s.name}
-                                                  {s.active
-                                                    ? ''
-                                                    : ' (inactive)'}
-                                                </span>
-                                              </label>
-                                            );
-                                          });
-                                        })()}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  <div className="mt-2 flex gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        applyManagerAssignments(editingUserId!)
-                                      }
-                                      disabled={loading}
-                                      className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                                    >
-                                      적용
-                                      {mgrDelta.toAdd.length +
-                                        mgrDelta.toRemove.length >
-                                      0
-                                        ? ` (+${mgrDelta.toAdd.length}/-${mgrDelta.toRemove.length})`
-                                        : ''}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setMgrSelectedSiteIds(
-                                          mgrAssignedSiteIds
-                                        )
-                                      }
-                                      disabled={loading}
-                                      className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                                    >
-                                      되돌리기
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setMgrSelectedSiteIds([])}
-                                      disabled={
-                                        loading ||
-                                        mgrSelectedSiteIds.length === 0
-                                      }
-                                      className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-                                    >
-                                      전체 해제
-                                    </button>
-                                  </div>
-
-                                  {mgrDelta.toAdd.length +
-                                    mgrDelta.toRemove.length >
-                                  0 ? (
-                                    <div className="mt-2 text-[11px] text-gray-600">
-                                      변경 예정: 추가 {mgrDelta.toAdd.length}개
-                                      / 해제 {mgrDelta.toRemove.length}개
-                                      {mgrDelta.toAdd.length > 0 ? (
-                                        <span>
-                                          {' '}
-                                          · 추가:{' '}
-                                          {mgrDelta.toAdd
-                                            .slice(0, 8)
-                                            .join(', ')}
-                                          {mgrDelta.toAdd.length > 8
-                                            ? ` 외 ${mgrDelta.toAdd.length - 8}개`
-                                            : ''}
-                                        </span>
-                                      ) : null}
-                                      {mgrDelta.toRemove.length > 0 ? (
-                                        <span>
-                                          {' '}
-                                          · 해제:{' '}
-                                          {mgrDelta.toRemove
-                                            .slice(0, 8)
-                                            .join(', ')}
-                                          {mgrDelta.toRemove.length > 8
-                                            ? ` 외 ${mgrDelta.toRemove.length - 8}개`
-                                            : ''}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                  ) : null}
-
-                                  <div className="mt-2 text-[11px] text-gray-500">
-                                    * 비활성 site는 선택할 수 없습니다.
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          )}
-
-                          <div className="text-xs text-gray-500">
-                            * siteId는 존재하는 siteId여야 합니다. (서버 검증)
-                          </div>
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          <EmployeesTab
+            user={user ? { userId: user.userId, role: user.role } : null}
+            loading={loading}
+            sites={sites}
+            filteredEmployees={filteredEmployees}
+            canCreateEmployee={canCreateEmployee}
+            isCreateEmployeeOpen={isCreateEmployeeOpen}
+            setIsCreateEmployeeOpen={setIsCreateEmployeeOpen}
+            createEmpUserId={createEmpUserId}
+            setCreateEmpUserId={setCreateEmpUserId}
+            createEmpUsername={createEmpUsername}
+            setCreateEmpUsername={setCreateEmpUsername}
+            createEmpPassword={createEmpPassword}
+            setCreateEmpPassword={setCreateEmpPassword}
+            createEmpSiteId={createEmpSiteId}
+            setCreateEmpSiteId={setCreateEmpSiteId}
+            createEmpRole={createEmpRole}
+            setCreateEmpRole={setCreateEmpRole}
+            createEmpUserIdRef={createEmpUserIdRef}
+            submitCreateEmployee={submitCreateEmployee}
+            empFilterSiteId={empFilterSiteId}
+            setEmpFilterSiteId={setEmpFilterSiteId}
+            refreshEmployees={refreshEmployees}
+            bulkTargetSiteId={bulkTargetSiteId}
+            setBulkTargetSiteId={setBulkTargetSiteId}
+            bulkSelectedUserIds={bulkSelectedUserIds}
+            setBulkSelectedUserIds={setBulkSelectedUserIds}
+            bulkSelectableInView={bulkSelectableInView}
+            bulkSelectedEmployees={bulkSelectedEmployees}
+            bulkMoving={bulkMoving}
+            submitBulkMoveEmployees={submitBulkMoveEmployees}
+            editingUserId={editingUserId}
+            startEditEmployee={startEditEmployee}
+            cancelEditEmployee={cancelEditEmployee}
+            submitUpdateEmployee={submitUpdateEmployee}
+            editEmpActive={editEmpActive}
+            setEditEmpActive={setEditEmpActive}
+            editingEmpRole={editingEmpRole}
+            editEmpUsername={editEmpUsername}
+            setEditEmpUsername={setEditEmpUsername}
+            editEmpSiteId={editEmpSiteId}
+            setEditEmpSiteId={setEditEmpSiteId}
+            canEditEmployeeSiteId={canEditEmployeeSiteId}
+            pendingActiveUserId={pendingActiveUserId}
+            submitToggleActiveQuick={submitToggleActiveQuick}
+            showAssignmentsUi={showAssignmentsUi}
+            isAssignmentsOpen={isAssignmentsOpen}
+            setIsAssignmentsOpen={setIsAssignmentsOpen}
+            mgrAssignedSiteIds={mgrAssignedSiteIds}
+            mgrSelectedSiteIds={mgrSelectedSiteIds}
+            setMgrSelectedSiteIds={setMgrSelectedSiteIds}
+            mgrSiteQuery={mgrSiteQuery}
+            setMgrSiteQuery={setMgrSiteQuery}
+            mgrDelta={mgrDelta}
+            refreshManagerAssignments={refreshManagerAssignments}
+            applyManagerAssignments={applyManagerAssignments}
+          />
         )}
       </main>
     </div>
