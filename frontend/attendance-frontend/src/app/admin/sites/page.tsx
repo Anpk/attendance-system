@@ -53,6 +53,9 @@ export default function AdminSitesPage() {
   // ---------- Employees state ----------
   const [employees, setEmployees] = useState<AdminEmployeeResponse[]>([]);
   const [empFilterSiteId, setEmpFilterSiteId] = useState<string>(''); // '' = 전체
+  const [pendingActiveUserId, setPendingActiveUserId] = useState<number | null>(
+    null
+  );
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [editEmpActive, setEditEmpActive] = useState<boolean>(true);
   const [editEmpSiteId, setEditEmpSiteId] = useState<string>('1');
@@ -225,6 +228,48 @@ export default function AdminSitesPage() {
     setMgrSelectedSiteIds([]);
   }
 
+  // ---------- Quick active toggle helper ----------
+  async function submitToggleActiveQuick(
+    targetUserId: number,
+    nextActive: boolean
+  ) {
+    if (!user) return;
+
+    setPendingActiveUserId(targetUserId);
+    try {
+      const updated = await adminUpdateEmployee(targetUserId, {
+        active: nextActive,
+        siteId: null,
+        username: null,
+      });
+
+      setEmployees((prev) =>
+        prev.map((it) => (it.userId === targetUserId ? updated : it))
+      );
+
+      // 편집 중인 대상이면 폼 상태도 동기화
+      if (editingUserId === targetUserId) {
+        setEditEmpActive(updated.active);
+      }
+
+      setFlashMessage(
+        nextActive ? '직원이 활성화되었습니다.' : '직원이 비활성화되었습니다.'
+      );
+    } catch (e) {
+      if (e instanceof ApiError) {
+        if (
+          e.code === 'INVALID_REQUEST_PARAM' ||
+          e.code === 'INVALID_REQUEST_PAYLOAD'
+        ) {
+          setFlashMessage(e.message);
+          return;
+        }
+      }
+      setFlashMessage(toUserMessage(e));
+    } finally {
+      setPendingActiveUserId(null);
+    }
+  }
   async function submitUpdateEmployee(targetUserId: number) {
     if (!user) return;
 
@@ -825,13 +870,25 @@ export default function AdminSitesPage() {
                         </div>
 
                         {!isEditing ? (
-                          <button
-                            type="button"
-                            onClick={() => startEditEmployee(x)}
-                            className="rounded border px-3 py-1 text-xs hover:bg-gray-50"
-                          >
-                            수정
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                submitToggleActiveQuick(x.userId, !x.active)
+                              }
+                              disabled={pendingActiveUserId === x.userId}
+                              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              {x.active ? '비활성' : '활성'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => startEditEmployee(x)}
+                              className="rounded border px-3 py-1 text-xs hover:bg-gray-50"
+                            >
+                              수정
+                            </button>
+                          </div>
                         ) : (
                           <div className="flex gap-2">
                             <button
