@@ -56,6 +56,12 @@ export default function AdminSitesPage() {
   const [pendingActiveUserId, setPendingActiveUserId] = useState<number | null>(
     null
   );
+
+  // bulk site move (MANAGER/ADMIN)
+  const [bulkSelectedUserIds, setBulkSelectedUserIds] = useState<number[]>([]);
+  const [bulkTargetSiteId, setBulkTargetSiteId] = useState<string>('');
+  const [bulkMoving, setBulkMoving] = useState<boolean>(false);
+
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [editEmpActive, setEditEmpActive] = useState<boolean>(true);
   const [editEmpSiteId, setEditEmpSiteId] = useState<string>('1');
@@ -72,6 +78,9 @@ export default function AdminSitesPage() {
   const createEmpUserIdRef = useRef<HTMLInputElement | null>(null);
 
   const canCreateEmployee = user?.role === 'ADMIN';
+  // 직원 생성 섹션: 접기/펼치기 (기본: 접힘)
+  const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] =
+    useState<boolean>(false);
 
   // siteId 변경(할당) 권한
   // - ADMIN: 항상 가능
@@ -100,6 +109,7 @@ export default function AdminSitesPage() {
 
   // 체크박스 선택(복수): 할당/해제 대상 siteId들
   const [mgrSelectedSiteIds, setMgrSelectedSiteIds] = useState<number[]>([]);
+  const [mgrSiteQuery, setMgrSiteQuery] = useState<string>('');
 
   // (legacy) 기존 단일 입력 변수는 남겨두되 UI에서는 사용하지 않음
   const [mgrSiteIdInput, setMgrSiteIdInput] = useState<string>('1');
@@ -270,6 +280,81 @@ export default function AdminSitesPage() {
       setPendingActiveUserId(null);
     }
   }
+
+  // ---------- Bulk site move helper (Option B) ----------
+  async function submitBulkMoveEmployees() {
+    if (!user) return;
+
+    if (user.role !== 'MANAGER' && user.role !== 'ADMIN') {
+      setFlashMessage('권한이 없습니다.');
+      return;
+    }
+
+    if (bulkSelectedUserIds.length === 0) {
+      setFlashMessage('이동할 직원을 선택해 주세요.');
+      return;
+    }
+
+    const target = Number(bulkTargetSiteId);
+    if (!Number.isFinite(target)) {
+      setFlashMessage('이동할 site를 선택해 주세요.');
+      return;
+    }
+
+    if (sites.length === 0) {
+      setFlashMessage(
+        'site 목록을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.'
+      );
+      return;
+    }
+
+    const targetSite = sites.find((s) => s.siteId === target);
+    if (!targetSite) {
+      setFlashMessage('선택할 수 없는 site입니다.');
+      return;
+    }
+    if (!targetSite.active) {
+      setFlashMessage('비활성 site로는 이동할 수 없습니다.');
+      return;
+    }
+
+    // 옵션 A 정합(서버가 최종 검증): MANAGER는 현재 site도 manageable 범위 내여야 함
+    if (user.role === 'MANAGER') {
+      const manageable = new Set(sites.map((s) => s.siteId));
+      const invalid = bulkSelectedUserIds.filter((uid) => {
+        const emp = employees.find((e) => e.userId === uid);
+        if (!emp) return true;
+        return !manageable.has(emp.siteId);
+      });
+      if (invalid.length > 0) {
+        setFlashMessage('관리 범위 밖 직원이 포함되어 이동할 수 없습니다.');
+        return;
+      }
+    }
+
+    setBulkMoving(true);
+    try {
+      let okCount = 0;
+      for (const uid of bulkSelectedUserIds) {
+        const updated = await adminUpdateEmployee(uid, {
+          siteId: target,
+          active: null,
+          username: null,
+        });
+        okCount += 1;
+        setEmployees((prev) =>
+          prev.map((it) => (it.userId === uid ? updated : it))
+        );
+      }
+
+      setFlashMessage(`직원 ${okCount}명을 site #${target}로 이동했습니다.`);
+      setBulkSelectedUserIds([]);
+    } catch (e) {
+      setFlashMessage(toUserMessage(e));
+    } finally {
+      setBulkMoving(false);
+    }
+  }
   async function submitUpdateEmployee(targetUserId: number) {
     if (!user) return;
 
@@ -343,18 +428,22 @@ export default function AdminSitesPage() {
     const siteIdNum = Number(createEmpSiteId);
 
     if (!Number.isFinite(userIdNum)) {
+      setIsCreateEmployeeOpen(true);
       setFlashMessage('userId를 확인해 주세요.');
       return;
     }
     if (!createEmpUsername.trim()) {
+      setIsCreateEmployeeOpen(true);
       setFlashMessage('username은 필수입니다.');
       return;
     }
     if (!createEmpPassword.trim()) {
+      setIsCreateEmployeeOpen(true);
       setFlashMessage('password는 필수입니다.');
       return;
     }
     if (!Number.isFinite(siteIdNum)) {
+      setIsCreateEmployeeOpen(true);
       setFlashMessage('siteId를 확인해 주세요.');
       return;
     }
@@ -393,6 +482,8 @@ export default function AdminSitesPage() {
       setCreateEmpRole('EMPLOYEE');
       await refreshEmployees();
       setFlashMessage('직원이 생성되었습니다.');
+      setIsCreateEmployeeOpen(true);
+      setBulkSelectedUserIds([]);
 
       requestAnimationFrame(() => {
         createEmpUserIdRef.current?.focus();
@@ -423,7 +514,7 @@ export default function AdminSitesPage() {
     try {
       const ids = await adminListManagerSites(managerUserId);
       setMgrAssignedSiteIds(ids);
-      setMgrSelectedSiteIds((prev) => prev.filter((x) => ids.includes(x)));
+      setMgrSelectedSiteIds(ids);
     } catch (e) {
       setFlashMessage(toUserMessage(e));
     } finally {
@@ -491,6 +582,51 @@ export default function AdminSitesPage() {
     }
   }
 
+  async function applyManagerAssignments(managerUserId: number) {
+    if (user?.role !== 'ADMIN') {
+      setFlashMessage('권한이 없습니다.');
+      return;
+    }
+
+    const current = new Set(mgrAssignedSiteIds);
+    const desired = new Set(mgrSelectedSiteIds);
+
+    const toAdd = Array.from(desired).filter((id) => !current.has(id));
+    const toRemove = Array.from(current).filter((id) => !desired.has(id));
+
+    if (toAdd.length === 0 && toRemove.length === 0) {
+      setFlashMessage('변경 사항이 없습니다.');
+      return;
+    }
+
+    // 비활성 site는 신규 할당 금지
+    const inactiveAdd = toAdd.find((id) => {
+      const s = sites.find((x) => x.siteId === id);
+      return s ? !s.active : false;
+    });
+    if (inactiveAdd != null) {
+      setFlashMessage('비활성 site는 할당할 수 없습니다.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      for (const siteId of toAdd) {
+        await adminAssignManagerSite({ managerUserId, siteId });
+      }
+      for (const siteId of toRemove) {
+        await adminRemoveManagerSite(managerUserId, siteId);
+      }
+
+      setFlashMessage('담당 site가 업데이트되었습니다.');
+      await refreshManagerAssignments(managerUserId);
+    } catch (e) {
+      setFlashMessage(toUserMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // ---------- initial load ----------
   useEffect(() => {
     if (!ready) return;
@@ -507,6 +643,8 @@ export default function AdminSitesPage() {
     if (!user) return;
     if (forbidden) return;
     if (tab !== 'employees') return;
+    // 직원 생성 섹션은 탭 진입 시 기본 접힘(원하면 수동으로 펼침)
+    setIsCreateEmployeeOpen(false);
     // employees 탭에서는 siteId select를 위해 sites도 필요
     if (sites.length === 0) {
       refreshSites();
@@ -696,119 +834,140 @@ export default function AdminSitesPage() {
           <section className="rounded border bg-white p-4">
             {canCreateEmployee && (
               <div className="mb-6 rounded border bg-white p-3">
-                <div className="mb-2 text-sm font-semibold">직원 생성</div>
-                <form
-                  className="grid gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (loading) return;
-                    void submitCreateEmployee();
-                  }}
-                >
-                  <label className="text-xs text-gray-700">
-                    userId
-                    <input
-                      ref={createEmpUserIdRef}
-                      value={createEmpUserId}
-                      onChange={(e) => setCreateEmpUserId(e.target.value)}
-                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                      inputMode="numeric"
-                      placeholder="예: 200"
-                    />
-                  </label>
-
-                  <label className="text-xs text-gray-700">
-                    username
-                    <input
-                      value={createEmpUsername}
-                      onChange={(e) => setCreateEmpUsername(e.target.value)}
-                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                      placeholder="예: user-200"
-                    />
-                  </label>
-
-                  <label className="text-xs text-gray-700">
-                    password
-                    <input
-                      value={createEmpPassword}
-                      onChange={(e) => setCreateEmpPassword(e.target.value)}
-                      className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                      placeholder="예: pw200"
-                      type="password"
-                    />
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="text-xs text-gray-700">
-                      siteId
-                      <select
-                        value={createEmpSiteId}
-                        onChange={(e) => setCreateEmpSiteId(e.target.value)}
-                        className="mt-1 w-full rounded border px-3 py-2 text-sm disabled:opacity-50"
-                        disabled={sites.length === 0}
-                      >
-                        {sites.length === 0 ? (
-                          <option value={createEmpSiteId}>
-                            site 목록 로딩중...
-                          </option>
-                        ) : (
-                          sites.map((s) => (
-                            <option
-                              key={s.siteId}
-                              value={String(s.siteId)}
-                              disabled={!s.active}
-                            >
-                              #{s.siteId} · {s.name}
-                              {s.active ? '' : ' (inactive)'}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                      <div className="mt-1 text-[11px] text-gray-500">
-                        * siteId는 선택 방식으로만 지정됩니다.
-                      </div>
-                      {(() => {
-                        const sid = Number(createEmpSiteId);
-                        const s = sites.find((x) => x.siteId === sid);
-                        if (!s) return null;
-                        if (s.active) return null;
-                        return (
-                          <div className="mt-1 text-[11px] text-red-600">
-                            * 비활성 site는 선택할 수 없습니다.
-                          </div>
-                        );
-                      })()}
-                    </label>
-
-                    <label className="text-xs text-gray-700">
-                      role
-                      <select
-                        value={createEmpRole}
-                        onChange={(e) =>
-                          setCreateEmpRole(e.target.value as EmployeeRole)
-                        }
-                        className="mt-1 w-full rounded border px-3 py-2 text-sm"
-                      >
-                        <option value="EMPLOYEE">EMPLOYEE</option>
-                        <option value="MANAGER">MANAGER</option>
-                      </select>
-                    </label>
-                  </div>
-
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-sm font-semibold">직원 생성</div>
                   <button
-                    type="submit"
-                    disabled={loading}
-                    className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                    type="button"
+                    onClick={() => setIsCreateEmployeeOpen((v) => !v)}
+                    className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
                   >
-                    생성
+                    {isCreateEmployeeOpen ? '접기' : '펼치기'}
                   </button>
+                </div>
 
-                  <div className="text-[11px] text-gray-500">
-                    * 직원 생성은 ADMIN 전용입니다.
+                {!isCreateEmployeeOpen ? (
+                  <div className="text-xs text-gray-600">
+                    * 필요 시 펼쳐서 신규 직원을 생성하세요. (ADMIN 전용)
                   </div>
-                </form>
+                ) : (
+                  <form
+                    className="grid gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (loading) return;
+                      void submitCreateEmployee();
+                    }}
+                  >
+                    <label className="text-xs text-gray-700">
+                      userId
+                      <input
+                        ref={createEmpUserIdRef}
+                        value={createEmpUserId}
+                        onChange={(e) => setCreateEmpUserId(e.target.value)}
+                        className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                        inputMode="numeric"
+                        placeholder="예: 200"
+                        disabled={loading}
+                      />
+                    </label>
+
+                    <label className="text-xs text-gray-700">
+                      username
+                      <input
+                        value={createEmpUsername}
+                        onChange={(e) => setCreateEmpUsername(e.target.value)}
+                        className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                        placeholder="예: user-200"
+                        disabled={loading}
+                      />
+                    </label>
+
+                    <label className="text-xs text-gray-700">
+                      password
+                      <input
+                        value={createEmpPassword}
+                        onChange={(e) => setCreateEmpPassword(e.target.value)}
+                        className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                        placeholder="예: pw200"
+                        type="password"
+                        disabled={loading}
+                      />
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-xs text-gray-700">
+                        siteId
+                        <select
+                          value={createEmpSiteId}
+                          onChange={(e) => setCreateEmpSiteId(e.target.value)}
+                          className="mt-1 w-full rounded border px-3 py-2 text-sm disabled:opacity-50"
+                          disabled={loading || sites.length === 0}
+                        >
+                          {sites.length === 0 ? (
+                            <option value={createEmpSiteId}>
+                              site 목록 로딩중...
+                            </option>
+                          ) : (
+                            sites.map((s) => (
+                              <option
+                                key={s.siteId}
+                                value={String(s.siteId)}
+                                disabled={!s.active}
+                              >
+                                #{s.siteId} · {s.name}
+                                {s.active ? '' : ' (inactive)'}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                        <div className="mt-1 text-[11px] text-gray-500">
+                          * siteId는 선택 방식으로만 지정됩니다.
+                        </div>
+                        {(() => {
+                          const sid = Number(createEmpSiteId);
+                          const s = sites.find((x) => x.siteId === sid);
+                          if (!s) return null;
+                          if (s.active) return null;
+                          return (
+                            <div className="mt-1 text-[11px] text-red-600">
+                              * 비활성 site는 선택할 수 없습니다.
+                            </div>
+                          );
+                        })()}
+                      </label>
+
+                      <label className="text-xs text-gray-700">
+                        role
+                        <select
+                          value={createEmpRole}
+                          onChange={(e) =>
+                            setCreateEmpRole(e.target.value as EmployeeRole)
+                          }
+                          className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                          disabled={loading}
+                        >
+                          <option value="EMPLOYEE">EMPLOYEE</option>
+                          <option value="MANAGER">MANAGER</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {loading ? '생성 중…' : '생성'}
+                    </button>
+
+                    <div className="text-[11px] text-gray-500">
+                      * 직원 생성은 ADMIN 전용입니다.
+                    </div>
+                  </form>
+                )}
               </div>
             )}
+
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold">직원 목록</h2>
               <div className="flex items-center gap-2">
@@ -839,6 +998,60 @@ export default function AdminSitesPage() {
               </div>
             </div>
 
+            {(user?.role === 'MANAGER' || user?.role === 'ADMIN') && (
+              <div className="mb-3 rounded border bg-white p-3">
+                <div className="mb-2 text-sm font-semibold">
+                  직원 일괄 site 이동
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs text-gray-700">
+                    대상 site
+                    <select
+                      value={bulkTargetSiteId}
+                      onChange={(e) => setBulkTargetSiteId(e.target.value)}
+                      className="ml-2 rounded border px-2 py-1 text-xs disabled:opacity-50"
+                      disabled={sites.length === 0 || bulkMoving}
+                    >
+                      <option value="">선택</option>
+                      {sites.map((s) => (
+                        <option
+                          key={s.siteId}
+                          value={String(s.siteId)}
+                          disabled={!s.active}
+                        >
+                          #{s.siteId} · {s.name}
+                          {s.active ? '' : ' (inactive)'}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => void submitBulkMoveEmployees()}
+                    disabled={bulkMoving || bulkSelectedUserIds.length === 0}
+                    className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    일괄 이동
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBulkSelectedUserIds([])}
+                    disabled={bulkMoving || bulkSelectedUserIds.length === 0}
+                    className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    선택 해제
+                  </button>
+
+                  <div className="text-[11px] text-gray-500">
+                    * 목록에서 EMPLOYEE만 선택할 수 있습니다. (MANAGER는
+                    서버에서 담당(assignments) 범위로 추가 검증)
+                  </div>
+                </div>
+              </div>
+            )}
+
             {filteredEmployees.length === 0 ? (
               <div className="text-sm text-gray-600">
                 표시할 직원이 없습니다.
@@ -859,27 +1072,50 @@ export default function AdminSitesPage() {
                       className={`rounded border p-3 ${x.active ? '' : 'bg-gray-100 border-gray-300'}`}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm">
-                          <div className="font-medium">
-                            #{x.userId} · {x.role}
-                            {(x as unknown as { username?: string })
-                              .username ? (
-                              <span className="ml-2 text-xs text-gray-600">
-                                @
-                                {
-                                  (x as unknown as { username?: string })
-                                    .username
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            disabled={
+                              x.role !== 'EMPLOYEE' ||
+                              user?.userId === x.userId ||
+                              bulkMoving
+                            }
+                            checked={bulkSelectedUserIds.includes(x.userId)}
+                            onChange={(e) => {
+                              const next = e.target.checked;
+                              setBulkSelectedUserIds((prev) => {
+                                if (next) {
+                                  return prev.includes(x.userId)
+                                    ? prev
+                                    : [...prev, x.userId];
                                 }
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            active: {String(x.active)} · siteId: {x.siteId}
-                            {!x.active ? (
-                              <span className="ml-2 rounded bg-gray-100 px-2 py-0.5 text-[11px]">
-                                비활성
-                              </span>
-                            ) : null}
+                                return prev.filter((id) => id !== x.userId);
+                              });
+                            }}
+                          />
+                          <div className="text-sm">
+                            <div className="font-medium">
+                              #{x.userId} · {x.role}
+                              {(x as unknown as { username?: string })
+                                .username ? (
+                                <span className="ml-2 text-xs text-gray-600">
+                                  @
+                                  {
+                                    (x as unknown as { username?: string })
+                                      .username
+                                  }
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              active: {String(x.active)} · siteId: {x.siteId}
+                              {!x.active ? (
+                                <span className="ml-2 rounded bg-gray-100 px-2 py-0.5 text-[11px]">
+                                  비활성
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
 
@@ -1067,18 +1303,28 @@ export default function AdminSitesPage() {
                                     <div className="text-xs text-gray-700">
                                       변경할 site 선택(복수)
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        refreshManagerAssignments(
-                                          editingUserId!
-                                        )
-                                      }
-                                      disabled={loading}
-                                      className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                                    >
-                                      새로고침
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        value={mgrSiteQuery}
+                                        onChange={(e) =>
+                                          setMgrSiteQuery(e.target.value)
+                                        }
+                                        placeholder="site 검색(ID/이름)"
+                                        className="rounded border px-2 py-1 text-xs"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          refreshManagerAssignments(
+                                            editingUserId!
+                                          )
+                                        }
+                                        disabled={loading}
+                                        className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+                                      >
+                                        새로고침
+                                      </button>
+                                    </div>
                                   </div>
 
                                   {/* 2) select 대신 체크박스로 복수 선택 */}
@@ -1089,50 +1335,77 @@ export default function AdminSitesPage() {
                                   ) : (
                                     <div className="max-h-40 overflow-auto rounded border p-2">
                                       <div className="grid gap-2">
-                                        {sites.map((s) => {
-                                          const disabled = !s.active;
-                                          const checked =
-                                            mgrSelectedSiteIds.includes(
-                                              s.siteId
-                                            );
-                                          return (
-                                            <label
-                                              key={s.siteId}
-                                              className={`flex items-center gap-2 text-xs ${
-                                                disabled
-                                                  ? 'text-gray-400'
-                                                  : 'text-gray-700'
-                                              }`}
-                                            >
-                                              <input
-                                                type="checkbox"
-                                                disabled={disabled}
-                                                checked={checked}
-                                                onChange={(e) => {
-                                                  const next = e.target.checked;
-                                                  setMgrSelectedSiteIds(
-                                                    (prev) => {
-                                                      if (next) {
-                                                        return prev.includes(
-                                                          s.siteId
-                                                        )
-                                                          ? prev
-                                                          : [...prev, s.siteId];
-                                                      }
-                                                      return prev.filter(
-                                                        (x) => x !== s.siteId
-                                                      );
-                                                    }
+                                        {(() => {
+                                          const q = mgrSiteQuery
+                                            .trim()
+                                            .toLowerCase();
+                                          const list =
+                                            q.length === 0
+                                              ? sites
+                                              : sites.filter((s) => {
+                                                  const name =
+                                                    s.name.toLowerCase();
+                                                  return (
+                                                    String(s.siteId).includes(
+                                                      q
+                                                    ) || name.includes(q)
                                                   );
-                                                }}
-                                              />
-                                              <span>
-                                                #{s.siteId} · {s.name}
-                                                {s.active ? '' : ' (inactive)'}
-                                              </span>
-                                            </label>
-                                          );
-                                        })}
+                                                });
+
+                                          return list.map((s) => {
+                                            const checked =
+                                              mgrSelectedSiteIds.includes(
+                                                s.siteId
+                                              );
+                                            // inactive라도 이미 선택된 것은 해제 가능
+                                            const disabled =
+                                              !s.active && !checked;
+
+                                            return (
+                                              <label
+                                                key={s.siteId}
+                                                className={`flex items-center gap-2 text-xs ${
+                                                  disabled
+                                                    ? 'text-gray-400'
+                                                    : 'text-gray-700'
+                                                }`}
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  disabled={disabled}
+                                                  checked={checked}
+                                                  onChange={(e) => {
+                                                    const next =
+                                                      e.target.checked;
+                                                    setMgrSelectedSiteIds(
+                                                      (prev) => {
+                                                        if (next) {
+                                                          return prev.includes(
+                                                            s.siteId
+                                                          )
+                                                            ? prev
+                                                            : [
+                                                                ...prev,
+                                                                s.siteId,
+                                                              ];
+                                                        }
+                                                        return prev.filter(
+                                                          (x) => x !== s.siteId
+                                                        );
+                                                      }
+                                                    );
+                                                  }}
+                                                />
+                                                <span>
+                                                  #{s.siteId} · {s.name}
+                                                  {s.active
+                                                    ? ''
+                                                    : ' (inactive)'}
+                                                </span>
+                                              </label>
+                                            );
+                                          });
+                                        })()}
                                       </div>
                                     </div>
                                   )}
@@ -1141,22 +1414,24 @@ export default function AdminSitesPage() {
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        assignManagerSite(editingUserId!)
+                                        applyManagerAssignments(editingUserId!)
                                       }
                                       disabled={loading}
                                       className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                                     >
-                                      할당
+                                      적용
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() =>
-                                        removeManagerSite(editingUserId!)
+                                        setMgrSelectedSiteIds(
+                                          mgrAssignedSiteIds
+                                        )
                                       }
                                       disabled={loading}
                                       className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                                     >
-                                      해제
+                                      되돌리기
                                     </button>
                                     <button
                                       type="button"
@@ -1167,7 +1442,7 @@ export default function AdminSitesPage() {
                                       }
                                       className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                                     >
-                                      선택 해제
+                                      전체 해제
                                     </button>
                                   </div>
 
