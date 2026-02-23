@@ -52,6 +52,7 @@ export default function AdminSitesPage() {
 
   // ---------- Employees state ----------
   const [employees, setEmployees] = useState<AdminEmployeeResponse[]>([]);
+  const [empFilterSiteId, setEmpFilterSiteId] = useState<string>(''); // '' = 전체
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [editEmpActive, setEditEmpActive] = useState<boolean>(true);
   const [editEmpSiteId, setEditEmpSiteId] = useState<string>('1');
@@ -79,6 +80,14 @@ export default function AdminSitesPage() {
     user?.role === 'ADMIN' &&
     editingUserId != null &&
     editingEmpRole === 'MANAGER';
+
+  // employees 목록 필터(프론트): siteId 기준
+  const filteredEmployees = useMemo(() => {
+    if (!empFilterSiteId) return employees;
+    const sid = Number(empFilterSiteId);
+    if (!Number.isFinite(sid)) return employees;
+    return employees.filter((e) => e.siteId === sid);
+  }, [employees, empFilterSiteId]);
 
   // ---------- Assignments (ADMIN 전용 / target=MANAGER일 때만) ----------
   const [mgrAssignedSiteIds, setMgrAssignedSiteIds] = useState<number[]>([]);
@@ -757,23 +766,41 @@ export default function AdminSitesPage() {
             )}
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold">직원 목록</h2>
-              <button
-                type="button"
-                onClick={refreshEmployees}
-                disabled={loading}
-                className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-              >
-                새로고침
-              </button>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-700">
+                  site 필터
+                  <select
+                    value={empFilterSiteId}
+                    onChange={(e) => setEmpFilterSiteId(e.target.value)}
+                    className="ml-2 rounded border px-2 py-1 text-xs"
+                    disabled={sites.length === 0}
+                  >
+                    <option value="">전체</option>
+                    {sites.map((s) => (
+                      <option key={s.siteId} value={String(s.siteId)}>
+                        #{s.siteId} · {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={refreshEmployees}
+                  disabled={loading}
+                  className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+                >
+                  새로고침
+                </button>
+              </div>
             </div>
 
-            {employees.length === 0 ? (
+            {filteredEmployees.length === 0 ? (
               <div className="text-sm text-gray-600">
                 표시할 직원이 없습니다.
               </div>
             ) : (
               <ul className="space-y-2">
-                {employees.map((x) => {
+                {filteredEmployees.map((x) => {
                   const isEditing = editingUserId === x.userId;
                   return (
                     <li key={x.userId} className="rounded border p-3">
