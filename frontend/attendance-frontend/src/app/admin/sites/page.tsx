@@ -101,6 +101,19 @@ export default function AdminSitesPage() {
     return employees.filter((e) => e.siteId === sid);
   }, [employees, empFilterSiteId]);
 
+  // --- Bulk selection memos
+  const bulkSelectableInView = useMemo(() => {
+    const selfId = user?.userId;
+    return filteredEmployees.filter(
+      (e) => e.role === 'EMPLOYEE' && (selfId == null || e.userId !== selfId)
+    );
+  }, [filteredEmployees, user]);
+
+  const bulkSelectedEmployees = useMemo(() => {
+    const selected = new Set(bulkSelectedUserIds);
+    return employees.filter((e) => selected.has(e.userId));
+  }, [employees, bulkSelectedUserIds]);
+
   // ---------- Assignments (ADMIN 전용 / target=MANAGER일 때만) ----------
   const [mgrAssignedSiteIds, setMgrAssignedSiteIds] = useState<number[]>([]);
 
@@ -110,6 +123,15 @@ export default function AdminSitesPage() {
   // 체크박스 선택(복수): 할당/해제 대상 siteId들
   const [mgrSelectedSiteIds, setMgrSelectedSiteIds] = useState<number[]>([]);
   const [mgrSiteQuery, setMgrSiteQuery] = useState<string>('');
+
+  // Assignments delta memo
+  const mgrDelta = useMemo(() => {
+    const current = new Set(mgrAssignedSiteIds);
+    const desired = new Set(mgrSelectedSiteIds);
+    const toAdd = Array.from(desired).filter((id) => !current.has(id));
+    const toRemove = Array.from(current).filter((id) => !desired.has(id));
+    return { toAdd, toRemove };
+  }, [mgrAssignedSiteIds, mgrSelectedSiteIds]);
 
   // (legacy) 기존 단일 입력 변수는 남겨두되 UI에서는 사용하지 않음
   const [mgrSiteIdInput, setMgrSiteIdInput] = useState<string>('1');
@@ -335,22 +357,42 @@ export default function AdminSitesPage() {
     setBulkMoving(true);
     try {
       let okCount = 0;
+      const failed: Array<{ userId: number; reason: string }> = [];
+
       for (const uid of bulkSelectedUserIds) {
-        const updated = await adminUpdateEmployee(uid, {
-          siteId: target,
-          active: null,
-          username: null,
-        });
-        okCount += 1;
-        setEmployees((prev) =>
-          prev.map((it) => (it.userId === uid ? updated : it))
-        );
+        try {
+          const updated = await adminUpdateEmployee(uid, {
+            siteId: target,
+            active: null,
+            username: null,
+          });
+          okCount += 1;
+          setEmployees((prev) =>
+            prev.map((it) => (it.userId === uid ? updated : it))
+          );
+        } catch (e) {
+          failed.push({
+            userId: uid,
+            reason: e instanceof ApiError ? e.message : toUserMessage(e),
+          });
+        }
       }
 
-      setFlashMessage(`직원 ${okCount}명을 site #${target}로 이동했습니다.`);
+      if (failed.length === 0) {
+        setFlashMessage(`직원 ${okCount}명을 site #${target}로 이동했습니다.`);
+      } else {
+        const ids = failed
+          .slice(0, 5)
+          .map((x) => x.userId)
+          .join(', ');
+        const more = failed.length > 5 ? ` 외 ${failed.length - 5}명` : '';
+        setFlashMessage(
+          `이동 완료: ${okCount}명, 실패: ${failed.length}명 (#${ids}${more}).`
+        );
+        console.error('bulk move failed', failed);
+      }
+
       setBulkSelectedUserIds([]);
-    } catch (e) {
-      setFlashMessage(toUserMessage(e));
     } finally {
       setBulkMoving(false);
     }
@@ -1026,6 +1068,22 @@ export default function AdminSitesPage() {
                     </select>
                   </label>
 
+                  <div className="text-[11px] text-gray-700">
+                    선택: {bulkSelectedUserIds.length}명
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ids = bulkSelectableInView.map((e) => e.userId);
+                      setBulkSelectedUserIds(ids);
+                    }}
+                    disabled={bulkMoving || bulkSelectableInView.length === 0}
+                    className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    전체 선택(현재 필터)
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => void submitBulkMoveEmployees()}
@@ -1048,6 +1106,18 @@ export default function AdminSitesPage() {
                     * 목록에서 EMPLOYEE만 선택할 수 있습니다. (MANAGER는
                     서버에서 담당(assignments) 범위로 추가 검증)
                   </div>
+                  {bulkSelectedEmployees.length > 0 ? (
+                    <div className="mt-2 text-[11px] text-gray-600">
+                      선택된 직원:{' '}
+                      {bulkSelectedEmployees
+                        .slice(0, 10)
+                        .map((e) => `#${e.userId}`)
+                        .join(', ')}
+                      {bulkSelectedEmployees.length > 10
+                        ? ` 외 ${bulkSelectedEmployees.length - 10}명`
+                        : ''}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}
@@ -1420,6 +1490,11 @@ export default function AdminSitesPage() {
                                       className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
                                     >
                                       적용
+                                      {mgrDelta.toAdd.length +
+                                        mgrDelta.toRemove.length >
+                                      0
+                                        ? ` (+${mgrDelta.toAdd.length}/-${mgrDelta.toRemove.length})`
+                                        : ''}
                                     </button>
                                     <button
                                       type="button"
@@ -1445,6 +1520,39 @@ export default function AdminSitesPage() {
                                       전체 해제
                                     </button>
                                   </div>
+
+                                  {mgrDelta.toAdd.length +
+                                    mgrDelta.toRemove.length >
+                                  0 ? (
+                                    <div className="mt-2 text-[11px] text-gray-600">
+                                      변경 예정: 추가 {mgrDelta.toAdd.length}개
+                                      / 해제 {mgrDelta.toRemove.length}개
+                                      {mgrDelta.toAdd.length > 0 ? (
+                                        <span>
+                                          {' '}
+                                          · 추가:{' '}
+                                          {mgrDelta.toAdd
+                                            .slice(0, 8)
+                                            .join(', ')}
+                                          {mgrDelta.toAdd.length > 8
+                                            ? ` 외 ${mgrDelta.toAdd.length - 8}개`
+                                            : ''}
+                                        </span>
+                                      ) : null}
+                                      {mgrDelta.toRemove.length > 0 ? (
+                                        <span>
+                                          {' '}
+                                          · 해제:{' '}
+                                          {mgrDelta.toRemove
+                                            .slice(0, 8)
+                                            .join(', ')}
+                                          {mgrDelta.toRemove.length > 8
+                                            ? ` 외 ${mgrDelta.toRemove.length - 8}개`
+                                            : ''}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
 
                                   <div className="mt-2 text-[11px] text-gray-500">
                                     * 비활성 site는 선택할 수 없습니다.
