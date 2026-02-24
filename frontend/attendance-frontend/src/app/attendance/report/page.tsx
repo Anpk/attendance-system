@@ -73,6 +73,14 @@ export default function AttendanceReportPage() {
   const [onlyMissingCheckout, setOnlyMissingCheckout] = useState(false);
   const [onlyCorrected, setOnlyCorrected] = useState(false);
 
+  const [applySummaryFilter, setApplySummaryFilter] = useState(true);
+
+  const invalidRange = useMemo(() => {
+    if (!from || !to) return false;
+    // YYYY-MM-DD는 문자열 비교로도 안전
+    return from > to;
+  }, [from, to]);
+
   const displayedItems = useMemo(() => {
     if (!data) return [];
     return data.items.filter((x) => {
@@ -82,6 +90,11 @@ export default function AttendanceReportPage() {
     });
   }, [data, onlyMissingCheckout, onlyCorrected]);
 
+  const summaryBaseItems = useMemo(() => {
+    if (!data) return [];
+    return applySummaryFilter ? displayedItems : data.items;
+  }, [data, applySummaryFilter, displayedItems]);
+
   const summary = useMemo(() => {
     if (!data) {
       return {
@@ -90,22 +103,26 @@ export default function AttendanceReportPage() {
         missingCheckoutCount: 0,
         missingCheckoutRatePct: 0,
         validWorkDays: 0,
+        totalWorkMinutes: 0,
       };
     }
 
-    const totalDays = data.totalDays || data.items.length;
-    const correctedCount = data.items.filter((x) => x.isCorrected).length;
-    const missingCheckoutCount = data.items.filter(
+    const baseItems = summaryBaseItems;
+    const totalDays = baseItems.length;
+    const correctedCount = baseItems.filter((x) => x.isCorrected).length;
+    const missingCheckoutCount = baseItems.filter(
       (x) => x.checkInAt != null && x.checkOutAt == null
     ).length;
-    const validWorkDays = data.items.filter(
-      (x) => x.workMinutes != null
-    ).length;
+    const validWorkDays = baseItems.filter((x) => x.workMinutes != null).length;
 
     const correctedRatePct =
       totalDays > 0 ? Math.round((correctedCount / totalDays) * 100) : 0;
     const missingCheckoutRatePct =
       totalDays > 0 ? Math.round((missingCheckoutCount / totalDays) * 100) : 0;
+
+    const totalWorkMinutes = applySummaryFilter
+      ? baseItems.reduce((acc, x) => acc + (x.workMinutes ?? 0), 0)
+      : data.totalWorkMinutes;
 
     return {
       correctedCount,
@@ -113,8 +130,9 @@ export default function AttendanceReportPage() {
       missingCheckoutCount,
       missingCheckoutRatePct,
       validWorkDays,
+      totalWorkMinutes,
     };
-  }, [data]);
+  }, [data, summaryBaseItems, applySummaryFilter]);
 
   async function load(override?: { from: string; to: string }) {
     if (!ready) return;
@@ -125,6 +143,10 @@ export default function AttendanceReportPage() {
 
     if (!effectiveFrom || !effectiveTo) {
       setFlashMessage('from/to를 입력해 주세요.');
+      return;
+    }
+    if (effectiveFrom > effectiveTo) {
+      setFlashMessage('from은 to보다 이후일 수 없습니다.');
       return;
     }
 
@@ -144,12 +166,13 @@ export default function AttendanceReportPage() {
     }
   }
 
-  function downloadCsv() {
+  function downloadCsv(kind: 'all' | 'displayed') {
     if (!data) {
       setFlashMessage('조회 후 다운로드할 수 있습니다.');
       return;
     }
-    if (displayedItems.length === 0) {
+    const items = kind === 'all' ? data.items : displayedItems;
+    if (items.length === 0) {
       setFlashMessage('다운로드할 항목이 없습니다.');
       return;
     }
@@ -166,7 +189,7 @@ export default function AttendanceReportPage() {
     const myUserId = user ? String(user.userId) : '';
     const myRole = user ? String(user.role) : '';
 
-    const rows = displayedItems.map((x) => {
+    const rows = items.map((x) => {
       const checkIn = x.checkInAt ? formatIsoToHm(x.checkInAt) : '';
       const checkOut = x.checkOutAt ? formatIsoToHm(x.checkOutAt) : '';
       const mins = x.workMinutes == null ? '' : String(x.workMinutes);
@@ -183,7 +206,8 @@ export default function AttendanceReportPage() {
     const safeFrom = (data.from ?? from).replace(/[^0-9-]/g, '');
     const safeTo = (data.to ?? to).replace(/[^0-9-]/g, '');
     const safeUserId = myUserId.replace(/[^0-9]/g, '') || 'unknown';
-    const filename = `attendance-report_user-${safeUserId}_${safeFrom}_to_${safeTo}.csv`;
+    const suffix = kind === 'all' ? 'all' : 'displayed';
+    const filename = `attendance-report_${suffix}_user-${safeUserId}_${safeFrom}_to_${safeTo}.csv`;
     downloadTextFile(filename, csv, 'text/csv;charset=utf-8');
     setFlashMessage('CSV 다운로드를 시작했습니다.');
   }
@@ -326,12 +350,17 @@ export default function AttendanceReportPage() {
             <button
               type="button"
               onClick={() => void load()}
-              disabled={loading || !ready || !user}
+              disabled={loading || !ready || !user || invalidRange}
               className="h-10 rounded border px-3 text-sm hover:bg-gray-50 disabled:opacity-50"
             >
               {loading ? '조회 중…' : '조회'}
             </button>
           </div>
+          {invalidRange && (
+            <div className="mt-2 text-[11px] text-red-600">
+              * from은 to보다 이후일 수 없습니다.
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-xs text-gray-700">
               <input
@@ -352,18 +381,44 @@ export default function AttendanceReportPage() {
               />
               정정 포함만
             </label>
+            <label className="flex items-center gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                checked={applySummaryFilter}
+                onChange={(e) => setApplySummaryFilter(e.target.checked)}
+                disabled={loading || !data}
+              />
+              집계에도 필터 적용
+            </label>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={downloadCsv}
-              disabled={loading || !data || displayedItems.length === 0}
+              onClick={() => downloadCsv('displayed')}
+              disabled={
+                loading || !data || displayedItems.length === 0 || invalidRange
+              }
               className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
             >
-              CSV 다운로드
+              CSV(표시 {displayedItems.length}건)
             </button>
+
+            <button
+              type="button"
+              onClick={() => downloadCsv('all')}
+              disabled={
+                loading ||
+                !data ||
+                (data?.items?.length ?? 0) === 0 ||
+                invalidRange
+              }
+              className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+            >
+              CSV(전체 {data?.items?.length ?? 0}건)
+            </button>
+
             <div className="text-[11px] text-gray-500">
-              * 현재 표시 중인 항목(필터 적용)을 CSV로 다운로드합니다.
+              * CSV(표시)는 현재 표시 중인 항목(필터 적용)만 다운로드합니다.
             </div>
           </div>
 
@@ -393,7 +448,7 @@ export default function AttendanceReportPage() {
                 <div className="rounded border bg-gray-50 p-3">
                   <div className="text-[11px] text-gray-600">총 근무시간</div>
                   <div className="text-sm font-semibold">
-                    {formatMinutes(data.totalWorkMinutes)}
+                    {formatMinutes(summary.totalWorkMinutes)}
                   </div>
                 </div>
                 <div className="rounded border bg-gray-50 p-3">
