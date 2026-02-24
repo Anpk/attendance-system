@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 
@@ -53,7 +53,7 @@ function parseJwtUser(token: string): ParsedUser | null {
   }
 }
 
-export default function LoginPage() {
+function LoginPageInner() {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -174,5 +174,13 @@ export default function LoginPage() {
 
       <p className="text-xs text-gray-500">사번/비밀번호로 로그인합니다.</p>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

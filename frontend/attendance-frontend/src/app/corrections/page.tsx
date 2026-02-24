@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import AppHeader from '@/app/_components/AppHeader';
 import type { CorrectionRequestListItem } from '@/app/_components/CorrectionRequestDetailModal';
@@ -62,7 +62,7 @@ function toEpochMillis(iso: string | null, fallback: number): number {
   return Number.isFinite(t) ? t : fallback;
 }
 
-export default function CorrectionsPage() {
+function CorrectionsPageInner() {
   const { user } = useAuth();
 
   const router = useRouter();
@@ -314,5 +314,13 @@ export default function CorrectionsPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function CorrectionsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <CorrectionsPageInner />
+    </Suspense>
   );
 }

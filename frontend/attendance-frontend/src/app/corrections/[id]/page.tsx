@@ -1,7 +1,14 @@
 'use client';
 
 import { useAuth } from '../../context/AuthContext';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 import AppHeader from '@/app/_components/AppHeader';
@@ -278,7 +285,7 @@ function applyCompatLayer(d: CorrectionRequestDetail): CorrectionRequestDetail {
   };
 }
 
-export default function CorrectionDetailPage() {
+function CorrectionDetailPageInner() {
   const { user } = useAuth();
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -693,5 +700,13 @@ export default function CorrectionDetailPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function CorrectionDetailPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <CorrectionDetailPageInner />
+    </Suspense>
   );
 }

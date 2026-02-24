@@ -5,9 +5,11 @@ import io.github.anpk.attendanceapp.attendance.interfaces.dto.*;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequest;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestStatus;
 import io.github.anpk.attendanceapp.correction.infrastructure.repository.CorrectionRequestRepository;
+import io.github.anpk.attendanceapp.employee.infrastructure.repository.EmployeeRepository;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
 import io.github.anpk.attendanceapp.error.ErrorCode;
+import io.github.anpk.attendanceapp.site.infrastructure.repository.SiteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,13 +42,19 @@ public class AttendanceService {
 
     private final AttendanceRepository attendanceRepository;
     private final CorrectionRequestRepository correctionRequestRepository;
+    private final EmployeeRepository employeeRepository;
+    private final SiteRepository siteRepository;
 
     public AttendanceService(
             AttendanceRepository attendanceRepository,
-            CorrectionRequestRepository correctionRequestRepository
+            CorrectionRequestRepository correctionRequestRepository,
+            EmployeeRepository employeeRepository,
+            SiteRepository siteRepository
     ) {
         this.attendanceRepository = attendanceRepository;
         this.correctionRequestRepository = correctionRequestRepository;
+        this.employeeRepository = employeeRepository;
+        this.siteRepository = siteRepository;
     }
 
     @Transactional
@@ -293,6 +301,97 @@ public class AttendanceService {
         );
     }
 
+    /**
+     * 관리자/매니저(site 스코프) 근태 리포트(기간)
+     * - from/to: YYYY-MM-DD
+     * - siteId: 필수
+     * - Final 합성 규칙(승인 최신 1건) 적용 결과 기준으로 minutes 집계
+     * - 평균은 요구사항에서 제외(총합만 제공)
+     */
+    @Transactional(readOnly = true)
+    public AdminAttendanceReportResponse getAttendanceReportBySite(Long siteId, String from, String to) {
+        if (siteId == null) {
+            throw new BusinessException(ErrorCode.MISSING_REQUIRED_PARAM, "siteId는 필수입니다.");
+        }
+        if (from == null || from.isBlank() || to == null || to.isBlank()) {
+            throw new BusinessException(ErrorCode.MISSING_REQUIRED_PARAM, "from/to는 필수입니다.");
+        }
+
+        final LocalDate fromDate;
+        final LocalDate toDate;
+        try {
+            fromDate = LocalDate.parse(from);
+            toDate = LocalDate.parse(to);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "from/to 형식이 올바르지 않습니다. 예: 2026-02-01");
+        }
+
+        if (fromDate.isAfter(toDate)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "from은 to보다 이후일 수 없습니다.");
+        }
+
+        if (!siteRepository.existsById(siteId)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "존재하지 않는 siteId 입니다.");
+        }
+
+        var employees = employeeRepository.findAllBySiteId(siteId);
+
+        var mappedEmployees = employees.stream().map(emp -> {
+            var attendances = attendanceRepository
+                    .findAllByUserIdAndWorkDateBetweenOrderByWorkDateAsc(emp.getUserId(), fromDate, toDate);
+
+            var items = attendances.stream().map(a -> {
+                FinalSnapshot snap = toFinalSnapshot(a);
+
+                Long workMinutes = null;
+                if (snap.finalCheckInAt() != null && snap.finalCheckOutAt() != null) {
+                    long mins = Duration.between(snap.finalCheckInAt(), snap.finalCheckOutAt()).toMinutes();
+                    if (mins >= 0) {
+                        workMinutes = mins;
+                    }
+                }
+
+                return new AdminAttendanceReportItemResponse(
+                        a.getId(),
+                        a.getWorkDate().toString(),
+                        snap.finalCheckInAt(),
+                        snap.finalCheckOutAt(),
+                        workMinutes,
+                        snap.isCorrected()
+                );
+            }).toList();
+
+            long totalWorkMinutes = 0L;
+            int correctedCount = 0;
+            int missingCheckoutCount = 0;
+            for (var it : items) {
+                if (it.isCorrected()) correctedCount++;
+                if (it.checkInAt() != null && it.checkOutAt() == null) missingCheckoutCount++;
+                if (it.workMinutes() != null) totalWorkMinutes += it.workMinutes();
+            }
+
+            return new AdminAttendanceReportEmployeeResponse(
+                    emp.getUserId(),
+                    emp.getUsername(),
+                    emp.getRole().name(),
+                    emp.isActive(),
+                    emp.getSiteId(),
+                    items.size(),
+                    totalWorkMinutes,
+                    missingCheckoutCount,
+                    correctedCount,
+                    items
+            );
+        }).toList();
+
+        return new AdminAttendanceReportResponse(
+                siteId,
+                fromDate.toString(),
+                toDate.toString(),
+                mappedEmployees.size(),
+                mappedEmployees
+        );
+    }
 
     /**
      * today 응답도 Final 합성 규칙 적용 (승인된 최신 정정 1건)
