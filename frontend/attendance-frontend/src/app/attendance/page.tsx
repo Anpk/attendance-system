@@ -1,14 +1,21 @@
 'use client';
 
 import { useRequireAuth } from '../context/AuthContext';
-import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  useMemo,
+  useRef,
+} from 'react';
 
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
 import type { AttendanceActionResponse } from '@/lib/api/types';
 import AppHeader from '@/app/_components/AppHeader';
 
-export default function AttendancePage() {
+function AttendancePageInner() {
   const { user, ready } = useRequireAuth();
 
   const [message, setMessage] = useState<string>('');
@@ -292,5 +299,13 @@ export default function AttendancePage() {
         {message && <p className="text-lg">{message}</p>}
       </main>
     </div>
+  );
+}
+
+export default function AttendancePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <AttendancePageInner />
+    </Suspense>
   );
 }

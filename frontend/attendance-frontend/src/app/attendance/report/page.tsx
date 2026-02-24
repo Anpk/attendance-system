@@ -5,7 +5,7 @@ import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
 import { toUserMessage } from '@/lib/api/error-messages';
 import { fetchAttendanceReport } from '@/lib/api/attendance-report';
 import type { AttendanceReportResponse } from '@/lib/api/types';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -54,7 +54,7 @@ function downloadTextFile(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function AttendanceReportPage() {
+function AttendanceReportPageInner() {
   const { user, ready, forbidden } = useRequireAuth();
   const { message, setFlashMessage, clearMessage } = useFlashMessage();
 
@@ -516,5 +516,13 @@ export default function AttendanceReportPage() {
         </section>
       </main>
     </div>
+  );
+}
+
+export default function AttendanceReportPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+      <AttendanceReportPageInner />
+    </Suspense>
   );
 }
