@@ -36,6 +36,24 @@ function formatMinutes(mins: number): string {
   return `${h}시간 ${m}분`;
 }
 
+function csvEscape(value: string): string {
+  const needsQuote = /[",\n\r]/.test(value);
+  const escaped = value.replace(/"/g, '""');
+  return needsQuote ? `"${escaped}"` : escaped;
+}
+
+function downloadTextFile(filename: string, content: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function AttendanceReportPage() {
   const { user, ready, forbidden } = useRequireAuth();
   const { message, setFlashMessage, clearMessage } = useFlashMessage();
@@ -64,6 +82,40 @@ export default function AttendanceReportPage() {
     });
   }, [data, onlyMissingCheckout, onlyCorrected]);
 
+  const summary = useMemo(() => {
+    if (!data) {
+      return {
+        correctedCount: 0,
+        correctedRatePct: 0,
+        missingCheckoutCount: 0,
+        missingCheckoutRatePct: 0,
+        validWorkDays: 0,
+      };
+    }
+
+    const totalDays = data.totalDays || data.items.length;
+    const correctedCount = data.items.filter((x) => x.isCorrected).length;
+    const missingCheckoutCount = data.items.filter(
+      (x) => x.checkInAt != null && x.checkOutAt == null
+    ).length;
+    const validWorkDays = data.items.filter(
+      (x) => x.workMinutes != null
+    ).length;
+
+    const correctedRatePct =
+      totalDays > 0 ? Math.round((correctedCount / totalDays) * 100) : 0;
+    const missingCheckoutRatePct =
+      totalDays > 0 ? Math.round((missingCheckoutCount / totalDays) * 100) : 0;
+
+    return {
+      correctedCount,
+      correctedRatePct,
+      missingCheckoutCount,
+      missingCheckoutRatePct,
+      validWorkDays,
+    };
+  }, [data]);
+
   async function load(override?: { from: string; to: string }) {
     if (!ready) return;
     if (!user) return;
@@ -90,6 +142,50 @@ export default function AttendanceReportPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function downloadCsv() {
+    if (!data) {
+      setFlashMessage('조회 후 다운로드할 수 있습니다.');
+      return;
+    }
+    if (displayedItems.length === 0) {
+      setFlashMessage('다운로드할 항목이 없습니다.');
+      return;
+    }
+
+    const header = [
+      'userId',
+      'role',
+      'workDate',
+      'checkIn',
+      'checkOut',
+      'workMinutes',
+      'isCorrected',
+    ];
+    const myUserId = user ? String(user.userId) : '';
+    const myRole = user ? String(user.role) : '';
+
+    const rows = displayedItems.map((x) => {
+      const checkIn = x.checkInAt ? formatIsoToHm(x.checkInAt) : '';
+      const checkOut = x.checkOutAt ? formatIsoToHm(x.checkOutAt) : '';
+      const mins = x.workMinutes == null ? '' : String(x.workMinutes);
+      const corrected = x.isCorrected ? 'Y' : 'N';
+      return [myUserId, myRole, x.workDate, checkIn, checkOut, mins, corrected]
+        .map(csvEscape)
+        .join(',');
+    });
+
+    // UTF-8 BOM for Excel
+    const bom = '\uFEFF';
+    const csv = bom + header.join(',') + '\n' + rows.join('\n') + '\n';
+
+    const safeFrom = (data.from ?? from).replace(/[^0-9-]/g, '');
+    const safeTo = (data.to ?? to).replace(/[^0-9-]/g, '');
+    const safeUserId = myUserId.replace(/[^0-9]/g, '') || 'unknown';
+    const filename = `attendance-report_user-${safeUserId}_${safeFrom}_to_${safeTo}.csv`;
+    downloadTextFile(filename, csv, 'text/csv;charset=utf-8');
+    setFlashMessage('CSV 다운로드를 시작했습니다.');
   }
 
   // 최초 진입 시 자동 로드
@@ -257,6 +353,19 @@ export default function AttendanceReportPage() {
               정정 포함만
             </label>
           </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={downloadCsv}
+              disabled={loading || !data || displayedItems.length === 0}
+              className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+            >
+              CSV 다운로드
+            </button>
+            <div className="text-[11px] text-gray-500">
+              * 현재 표시 중인 항목(필터 적용)을 CSV로 다운로드합니다.
+            </div>
+          </div>
 
           <div className="mt-2 text-[11px] text-gray-500">
             * 평균 근무 시간은 제공하지 않습니다(요구사항 제외).
@@ -268,7 +377,7 @@ export default function AttendanceReportPage() {
             <div className="text-sm text-gray-600">조회 결과가 없습니다.</div>
           ) : (
             <>
-              <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
                 <div className="rounded border bg-gray-50 p-3">
                   <div className="text-[11px] text-gray-600">기간</div>
                   <div className="text-sm font-semibold">
@@ -288,9 +397,22 @@ export default function AttendanceReportPage() {
                   </div>
                 </div>
                 <div className="rounded border bg-gray-50 p-3">
-                  <div className="text-[11px] text-gray-600">정정 포함</div>
+                  <div className="text-[11px] text-gray-600">정정</div>
                   <div className="text-sm font-semibold">
-                    {data.items.filter((x) => x.isCorrected).length}건
+                    {summary.correctedCount}건 ({summary.correctedRatePct}%)
+                  </div>
+                </div>
+                <div className="rounded border bg-gray-50 p-3">
+                  <div className="text-[11px] text-gray-600">퇴근 누락</div>
+                  <div className="text-sm font-semibold">
+                    {summary.missingCheckoutCount}건 (
+                    {summary.missingCheckoutRatePct}%)
+                  </div>
+                </div>
+                <div className="rounded border bg-gray-50 p-3">
+                  <div className="text-[11px] text-gray-600">유효 근무일</div>
+                  <div className="text-sm font-semibold">
+                    {summary.validWorkDays}일
                   </div>
                 </div>
               </div>
