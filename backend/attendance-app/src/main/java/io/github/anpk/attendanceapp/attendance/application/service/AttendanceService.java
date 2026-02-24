@@ -1,10 +1,7 @@
 package io.github.anpk.attendanceapp.attendance.application.service;
 
 import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
-import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceActionResponse;
-import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceListItemResponse;
-import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceListResponse;
-import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceReadResponse;
+import io.github.anpk.attendanceapp.attendance.interfaces.dto.*;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequest;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestStatus;
 import io.github.anpk.attendanceapp.correction.infrastructure.repository.CorrectionRequestRepository;
@@ -229,6 +226,73 @@ public class AttendanceService {
                 snap.appliedCorrectionRequestId()
         );
     }
+
+    /**
+     * 근태 리포트(기간)
+     * - from/to: YYYY-MM-DD
+     * - Final 합성 규칙(승인 최신 1건) 적용 결과 기준으로 minutes 집계
+     * - 평균은 요구사항에서 제외(총합만 제공)
+     */
+    @Transactional(readOnly = true)
+    public AttendanceReportResponse getMyAttendanceReport(Long userId, String from, String to) {
+        if (from == null || from.isBlank() || to == null || to.isBlank()) {
+            throw new BusinessException(ErrorCode.MISSING_REQUIRED_PARAM, "from/to는 필수입니다.");
+        }
+
+        final LocalDate fromDate;
+        final LocalDate toDate;
+        try {
+            fromDate = LocalDate.parse(from);
+            toDate = LocalDate.parse(to);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "from/to 형식이 올바르지 않습니다. 예: 2026-02-01");
+        }
+
+        if (fromDate.isAfter(toDate)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "from은 to보다 이후일 수 없습니다.");
+        }
+
+        List<Attendance> items = attendanceRepository
+                .findAllByUserIdAndWorkDateBetweenOrderByWorkDateAsc(userId, fromDate, toDate);
+
+        long totalWorkMinutes = 0L;
+        List<AttendanceReportItemResponse> mapped = items.stream()
+                .map(a -> {
+                    FinalSnapshot snap = toFinalSnapshot(a);
+
+                    Long workMinutes = null;
+                    if (snap.finalCheckInAt() != null && snap.finalCheckOutAt() != null) {
+                        long mins = Duration.between(snap.finalCheckInAt(), snap.finalCheckOutAt()).toMinutes();
+                        // 비정상(음수) 방어: 데이터 손상/예외 케이스가 있더라도 리포트가 죽지 않도록 null 처리
+                        if (mins >= 0) {
+                            workMinutes = mins;
+                        }
+                    }
+
+                    return new AttendanceReportItemResponse(
+                            a.getId(),
+                            a.getWorkDate().toString(),
+                            snap.finalCheckInAt(),
+                            snap.finalCheckOutAt(),
+                            workMinutes,
+                            snap.isCorrected()
+                    );
+                })
+                .toList();
+
+        for (AttendanceReportItemResponse it : mapped) {
+            if (it.workMinutes() != null) totalWorkMinutes += it.workMinutes();
+        }
+
+        return new AttendanceReportResponse(
+                fromDate.toString(),
+                toDate.toString(),
+                mapped.size(),
+                totalWorkMinutes,
+                mapped
+        );
+    }
+
 
     /**
      * today 응답도 Final 합성 규칙 적용 (승인된 최신 정정 1건)

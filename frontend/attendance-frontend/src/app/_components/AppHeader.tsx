@@ -47,6 +47,12 @@ export default function AppHeader() {
             월별 목록
           </Link>
           <Link
+            href="/attendance/report"
+            className="rounded px-2 py-1 hover:bg-gray-100"
+          >
+            리포트
+          </Link>
+          <Link
             href="/corrections?tab=my"
             className="rounded px-2 py-1 hover:bg-gray-100"
           >

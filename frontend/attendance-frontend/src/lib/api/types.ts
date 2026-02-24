@@ -79,6 +79,27 @@ export type AttendanceListResponse = {
 };
 
 // =========================
+// Attendance Report (MVP)
+// =========================
+
+export type AttendanceReportItemResponse = {
+  attendanceId: number;
+  workDate: string; // YYYY-MM-DD
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  workMinutes: number | null;
+  isCorrected: boolean;
+};
+
+export type AttendanceReportResponse = {
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+  totalDays: number;
+  totalWorkMinutes: number;
+  items: AttendanceReportItemResponse[];
+};
+
+// =========================
 // Admin Ops DTO (MVP)
 // =========================
 

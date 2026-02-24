@@ -4,6 +4,7 @@ import io.github.anpk.attendanceapp.attendance.application.service.AttendanceSer
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceActionResponse;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceListResponse;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceReadResponse;
+import io.github.anpk.attendanceapp.attendance.interfaces.dto.AttendanceReportResponse;
 import io.github.anpk.attendanceapp.auth.CurrentUserId;
 
 import org.springframework.http.MediaType;
@@ -68,6 +69,20 @@ public class AttendanceController {
     ) {
         // 최소: paging 미지원이면 page/size 고정
         return attendanceService.listMyAttendancesByMonth(userId, month, 1, 1000);
+    }
+
+    /**
+     * 근태 리포트(기간)
+     * - from/to 필수 (YYYY-MM-DD)
+     * - Final 합성 규칙 적용
+     */
+    @GetMapping("/report")
+    public AttendanceReportResponse report(
+            @CurrentUserId Long userId,
+            @RequestParam String from,
+            @RequestParam String to
+    ) {
+        return attendanceService.getMyAttendanceReport(userId, from, to);
     }
 
     /**
