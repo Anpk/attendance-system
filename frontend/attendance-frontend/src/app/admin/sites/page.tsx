@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import AppHeader from '@/app/_components/AppHeader';
 import SitesTab from './_components/SitesTab';
 import EmployeesTab from './_components/EmployeesTab';
@@ -27,6 +27,11 @@ function AdminSitesPageInner() {
     roles: ['ADMIN', 'MANAGER'],
   });
 
+  const userLite = useMemo(
+    () => (user ? { userId: user.userId, role: user.role } : null),
+    [user?.userId, user?.role]
+  );
+
   const { tab, setTabAndSync } = useAdminTab<TabKey>({
     basePath: '/admin/sites',
     defaultTab: 'sites',
@@ -37,13 +42,13 @@ function AdminSitesPageInner() {
   const [loading, setLoading] = useState(false);
 
   const sitesOps = useSitesOps({
-    user: user ? { userId: user.userId, role: user.role } : null,
+    user: userLite,
     setLoading,
     setFlashMessage,
   });
 
   const employeesOps = useEmployeesOps({
-    user: user ? { userId: user.userId, role: user.role } : null,
+    user: userLite,
     sites: sitesOps.sites,
     setLoading,
     setFlashMessage,
@@ -51,7 +56,7 @@ function AdminSitesPageInner() {
 
   useAdminPageBootstrap({
     ready,
-    user: user ? { userId: user.userId, role: user.role } : null,
+    user: userLite,
     forbidden,
     tab,
 
@@ -129,7 +134,7 @@ function AdminSitesPageInner() {
 
         {tab === 'employees' && (
           <EmployeesTab
-            user={user ? { userId: user.userId, role: user.role } : null}
+            user={userLite}
             loading={loading}
             sites={sitesOps.sites}
             filteredEmployees={employeesOps.filteredEmployees}

@@ -29,7 +29,7 @@ export function useAdminPageBootstrap(params: Params) {
     if (params.forbidden) return;
     params.refreshSites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.ready, params.user, params.forbidden]);
+  }, [params.ready, params.user?.userId, params.user?.role, params.forbidden]);
 
   // employees tab entry
   useEffect(() => {
@@ -45,8 +45,13 @@ export function useAdminPageBootstrap(params: Params) {
     }
     params.refreshEmployees();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.tab, params.ready, params.user, params.forbidden]);
-
+  }, [
+    params.tab,
+    params.ready,
+    params.user?.userId,
+    params.user?.role,
+    params.forbidden,
+  ]);
   // assignments load when editing manager (admin only)
   useEffect(() => {
     if (!params.ready) return;
@@ -61,7 +66,8 @@ export function useAdminPageBootstrap(params: Params) {
     params.showAssignmentsUi,
     params.editingUserId,
     params.ready,
-    params.user,
+    params.user?.userId,
+    params.user?.role,
     params.forbidden,
   ]);
 }
