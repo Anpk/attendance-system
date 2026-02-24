@@ -1,5 +1,6 @@
 import { apiFetch } from './client';
 import type {
+  AdminAttendanceReportResponse,
   AdminEmployeeResponse,
   AdminEmployeeCreateRequest,
   AdminEmployeeUpdateRequest,
@@ -116,5 +117,24 @@ export async function adminListManagerSites(
   const baseUrl = getBaseUrl();
   return apiFetch<number[]>(
     `${baseUrl}/api/admin/manager-site-assignments/managers/${managerUserId}/sites`
+  );
+}
+
+// -------------------------
+// Admin Attendance Report (ADMIN/MANAGER)
+// -------------------------
+export async function adminFetchAttendanceReport(params: {
+  siteId: number;
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+}): Promise<AdminAttendanceReportResponse> {
+  const baseUrl = getBaseUrl();
+  const qs = new URLSearchParams({
+    siteId: String(params.siteId),
+    from: params.from,
+    to: params.to,
+  });
+  return apiFetch<AdminAttendanceReportResponse>(
+    `${baseUrl}/api/admin/attendance/report?${qs.toString()}`
   );
 }

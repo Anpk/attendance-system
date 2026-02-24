@@ -7,38 +7,47 @@ export default function SitesTab(props: {
   loading: boolean;
   sites: AdminSiteResponse[];
 
-  createName: string;
-  setCreateName: (v: string) => void;
-  submitCreateSite: () => void;
-  refreshSites: () => void;
+  create: {
+    name: string;
+    setName: (v: string) => void;
+    submitCreateSite: () => void | Promise<void>;
+  };
 
-  editingSiteId: number | null;
-  startEditSite: (s: AdminSiteResponse) => void;
-  cancelEditSite: () => void;
+  edit: {
+    editingSiteId: number | null;
+    startEditSite: (s: AdminSiteResponse) => void;
+    cancelEditSite: () => void;
+    name: string;
+    setName: (v: string) => void;
+    active: boolean;
+    setActive: (v: boolean) => void;
+    submitUpdateSite: (siteId: number) => void | Promise<void>;
+  };
 
-  editSiteName: string;
-  setEditSiteName: (v: string) => void;
-  editSiteActive: boolean;
-  setEditSiteActive: (v: boolean) => void;
-  submitUpdateSite: (siteId: number) => void;
+  actions: {
+    refreshSites: () => void | Promise<void>;
+  };
 }) {
+  const { userRole, loading, sites } = props;
+
   const {
-    userRole,
-    loading,
-    sites,
-    createName,
-    setCreateName,
+    name: createName,
+    setName: setCreateName,
     submitCreateSite,
-    refreshSites,
+  } = props.create;
+
+  const { refreshSites } = props.actions;
+
+  const {
     editingSiteId,
     startEditSite,
     cancelEditSite,
-    editSiteName,
-    setEditSiteName,
-    editSiteActive,
-    setEditSiteActive,
+    name: editSiteName,
+    setName: setEditSiteName,
+    active: editSiteActive,
+    setActive: setEditSiteActive,
     submitUpdateSite,
-  } = props;
+  } = props.edit;
 
   return (
     <>

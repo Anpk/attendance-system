@@ -14,82 +14,85 @@ export default function EmployeesTab(props: {
   sites: AdminSiteResponse[];
   filteredEmployees: AdminEmployeeResponse[];
 
-  // create
-  canCreateEmployee: boolean;
-  isCreateEmployeeOpen: boolean;
-  setIsCreateEmployeeOpen: Dispatch<SetStateAction<boolean>>;
-  createEmpUserId: string;
-  setCreateEmpUserId: (v: string) => void;
-  createEmpUsername: string;
-  setCreateEmpUsername: (v: string) => void;
-  createEmpPassword: string;
-  setCreateEmpPassword: (v: string) => void;
-  createEmpSiteId: string;
-  setCreateEmpSiteId: (v: string) => void;
-  createEmpRole: EmployeeRole;
-  setCreateEmpRole: (v: EmployeeRole) => void;
-  createEmpUserIdRef: MutableRefObject<HTMLInputElement | null>;
-  submitCreateEmployee: () => Promise<void>;
+  create: {
+    canCreateEmployee: boolean;
+    isCreateEmployeeOpen: boolean;
+    setIsCreateEmployeeOpen: Dispatch<SetStateAction<boolean>>;
+    createEmpUserId: string;
+    setCreateEmpUserId: (v: string) => void;
+    createEmpUsername: string;
+    setCreateEmpUsername: (v: string) => void;
+    createEmpPassword: string;
+    setCreateEmpPassword: (v: string) => void;
+    createEmpSiteId: string;
+    setCreateEmpSiteId: (v: string) => void;
+    createEmpRole: EmployeeRole;
+    setCreateEmpRole: (v: EmployeeRole) => void;
+    createEmpUserIdRef: MutableRefObject<HTMLInputElement | null>;
+    submitCreateEmployee: () => Promise<void>;
+  };
 
-  // list/filter
-  empFilterSiteId: string;
-  setEmpFilterSiteId: (v: string) => void;
-  refreshEmployees: () => Promise<void>;
+  list: {
+    empFilterSiteId: string;
+    setEmpFilterSiteId: (v: string) => void;
+    refreshEmployees: () => Promise<void>;
+  };
 
-  // bulk move
-  bulkTargetSiteId: string;
-  setBulkTargetSiteId: (v: string) => void;
-  bulkSelectedUserIds: number[];
-  setBulkSelectedUserIds: Dispatch<SetStateAction<number[]>>;
-  bulkSelectableInView: AdminEmployeeResponse[];
-  bulkSelectedEmployees: AdminEmployeeResponse[];
-  bulkMoving: boolean;
-  submitBulkMoveEmployees: () => Promise<void>;
+  bulkMove: {
+    bulkTargetSiteId: string;
+    setBulkTargetSiteId: (v: string) => void;
+    bulkSelectedUserIds: number[];
+    setBulkSelectedUserIds: Dispatch<SetStateAction<number[]>>;
+    bulkSelectableInView: AdminEmployeeResponse[];
+    bulkSelectedEmployees: AdminEmployeeResponse[];
+    bulkMoving: boolean;
+    submitBulkMoveEmployees: () => Promise<void>;
+  };
 
-  // row edit
-  editingUserId: number | null;
-  startEditEmployee: (x: AdminEmployeeResponse) => void;
-  cancelEditEmployee: () => void;
-  submitUpdateEmployee: (targetUserId: number) => Promise<void>;
+  rowEdit: {
+    editingUserId: number | null;
+    startEditEmployee: (x: AdminEmployeeResponse) => void;
+    cancelEditEmployee: () => void;
+    submitUpdateEmployee: (targetUserId: number) => Promise<void>;
 
-  editEmpActive: boolean;
-  setEditEmpActive: (v: boolean) => void;
-  editingEmpRole: EmployeeRole;
+    editEmpActive: boolean;
+    setEditEmpActive: (v: boolean) => void;
+    editingEmpRole: EmployeeRole;
 
-  editEmpUsername: string;
-  setEditEmpUsername: (v: string) => void;
+    editEmpUsername: string;
+    setEditEmpUsername: (v: string) => void;
 
-  editEmpSiteId: string;
-  setEditEmpSiteId: (v: string) => void;
-  canEditEmployeeSiteId: boolean;
+    editEmpSiteId: string;
+    setEditEmpSiteId: (v: string) => void;
+    canEditEmployeeSiteId: boolean;
+  };
 
-  // quick toggle
-  pendingActiveUserId: number | null;
-  submitToggleActiveQuick: (
-    targetUserId: number,
-    nextActive: boolean
-  ) => Promise<void>;
+  quickToggle: {
+    pendingActiveUserId: number | null;
+    submitToggleActiveQuick: (
+      targetUserId: number,
+      nextActive: boolean
+    ) => Promise<void>;
+  };
 
-  // assignments
-  showAssignmentsUi: boolean;
-  isAssignmentsOpen: boolean;
-  setIsAssignmentsOpen: Dispatch<SetStateAction<boolean>>;
-  mgrAssignedSiteIds: number[];
-  mgrSelectedSiteIds: number[];
-  setMgrSelectedSiteIds: Dispatch<SetStateAction<number[]>>;
-  mgrSiteQuery: string;
-  setMgrSiteQuery: (v: string) => void;
-  mgrDelta: { toAdd: number[]; toRemove: number[] };
-  refreshManagerAssignments: (managerUserId: number) => Promise<void>;
-  applyManagerAssignments: (managerUserId: number) => Promise<void>;
+  assignments: {
+    showAssignmentsUi: boolean;
+    isAssignmentsOpen: boolean;
+    setIsAssignmentsOpen: Dispatch<SetStateAction<boolean>>;
+    mgrAssignedSiteIds: number[];
+    mgrSelectedSiteIds: number[];
+    setMgrSelectedSiteIds: Dispatch<SetStateAction<number[]>>;
+    mgrSiteQuery: string;
+    setMgrSiteQuery: (v: string) => void;
+    mgrDelta: { toAdd: number[]; toRemove: number[] };
+    refreshManagerAssignments: (managerUserId: number) => Promise<void>;
+    applyManagerAssignments: (managerUserId: number) => Promise<void>;
+  };
 }) {
   // ✅ 그대로 page.tsx에서 옮긴 렌더링(동작 변경 없음)
-  const {
-    user,
-    loading,
-    sites,
-    filteredEmployees,
+  const { user, loading, sites, filteredEmployees } = props;
 
+  const {
     canCreateEmployee,
     isCreateEmployeeOpen,
     setIsCreateEmployeeOpen,
@@ -105,11 +108,11 @@ export default function EmployeesTab(props: {
     setCreateEmpRole,
     createEmpUserIdRef,
     submitCreateEmployee,
+  } = props.create;
 
-    empFilterSiteId,
-    setEmpFilterSiteId,
-    refreshEmployees,
+  const { empFilterSiteId, setEmpFilterSiteId, refreshEmployees } = props.list;
 
+  const {
     bulkTargetSiteId,
     setBulkTargetSiteId,
     bulkSelectedUserIds,
@@ -118,12 +121,13 @@ export default function EmployeesTab(props: {
     bulkSelectedEmployees,
     bulkMoving,
     submitBulkMoveEmployees,
+  } = props.bulkMove;
 
+  const {
     editingUserId,
     startEditEmployee,
     cancelEditEmployee,
     submitUpdateEmployee,
-
     editEmpActive,
     setEditEmpActive,
     editingEmpRole,
@@ -132,10 +136,11 @@ export default function EmployeesTab(props: {
     editEmpSiteId,
     setEditEmpSiteId,
     canEditEmployeeSiteId,
+  } = props.rowEdit;
 
-    pendingActiveUserId,
-    submitToggleActiveQuick,
+  const { pendingActiveUserId, submitToggleActiveQuick } = props.quickToggle;
 
+  const {
     showAssignmentsUi,
     isAssignmentsOpen,
     setIsAssignmentsOpen,
@@ -147,7 +152,7 @@ export default function EmployeesTab(props: {
     mgrDelta,
     refreshManagerAssignments,
     applyManagerAssignments,
-  } = props;
+  } = props.assignments;
 
   return (
     <section className="rounded border bg-white p-4">

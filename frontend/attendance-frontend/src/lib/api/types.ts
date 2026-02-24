@@ -143,3 +143,37 @@ export type AdminManagerSiteAssignRequest = {
   managerUserId: number;
   siteId: number;
 };
+
+// =========================
+// Admin Attendance Report (site scoped)
+// =========================
+
+export type AdminAttendanceReportItemResponse = {
+  attendanceId: number;
+  workDate: string; // YYYY-MM-DD
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  workMinutes: number | null;
+  isCorrected: boolean;
+};
+
+export type AdminAttendanceReportEmployeeResponse = {
+  userId: number;
+  username: string;
+  role: string;
+  active: boolean;
+  siteId: number;
+  totalDays: number;
+  totalWorkMinutes: number;
+  missingCheckoutCount: number;
+  correctedCount: number;
+  items: AdminAttendanceReportItemResponse[];
+};
+
+export type AdminAttendanceReportResponse = {
+  siteId: number;
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+  totalEmployees: number;
+  employees: AdminAttendanceReportEmployeeResponse[];
+};
