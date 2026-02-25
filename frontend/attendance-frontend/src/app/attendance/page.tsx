@@ -10,6 +10,8 @@ import {
   useRef,
 } from 'react';
 
+import { useRouter } from 'next/navigation';
+
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
 import type { AttendanceActionResponse } from '@/lib/api/types';
@@ -17,6 +19,7 @@ import AppHeader from '@/app/_components/AppHeader';
 
 function AttendancePageInner() {
   const { user, ready } = useRequireAuth();
+  const router = useRouter();
 
   const [message, setMessage] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -131,6 +134,15 @@ function AttendancePageInner() {
     return toUserMessage(e);
   }
 
+  // ADMIN/MANAGER는 진입 차단
+  useEffect(() => {
+    if (!ready) return;
+    if (!user) return;
+    if (user.role === 'ADMIN' || user.role === 'MANAGER') {
+      router.replace('/admin/sites');
+    }
+  }, [ready, user, router]);
+
   // 오늘 출근 상태 조회
   const fetchTodayAttendance = useCallback(async () => {
     if (!user) return;
@@ -241,6 +253,10 @@ function AttendancePageInner() {
 
   const handleCheckOut = () =>
     checkOutWithRequestParam(`${baseUrl}/api/attendance/check-out`);
+
+  if (ready && user && (user.role === 'ADMIN' || user.role === 'MANAGER')) {
+    return <div className="min-h-screen bg-gray-50" />;
+  }
 
   if (!baseUrl) {
     return (
