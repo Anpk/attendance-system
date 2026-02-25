@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
-import type { AuthLoginResponse } from '@/lib/api/types';
+import { ApiError, type AuthLoginResponse } from '@/lib/api/types';
 
 type ParsedUser = {
   userId: number;
@@ -57,6 +57,7 @@ function LoginPageInner() {
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const { login } = useAuth();
   const router = useRouter();
@@ -88,7 +89,34 @@ function LoginPageInner() {
     return raw;
   }
 
+  function normalizeNext(
+    next: string | null,
+    role: ParsedUser['role']
+  ): string | null {
+    if (!next) return null;
+
+    // ✅ deprecated routes: report로 통합
+    if (next === '/attendance/monthly' || next === '/attendance/history') {
+      return role === 'EMPLOYEE' ? '/attendance/report' : '/admin/sites';
+    }
+
+    const isAdminOrManager = role === 'ADMIN' || role === 'MANAGER';
+
+    // ✅ ADMIN/MANAGER는 개인 근태 입력 페이지가 불필요
+    // - 출/퇴근(/attendance) 및 그 하위 경로는 관리자 진입으로 보정
+    // - 다만 /attendance/report 는 "관리 대상 리포트"로 활용하므로 허용
+    if (isAdminOrManager) {
+      if (next === '/attendance') return '/admin/sites';
+      if (next.startsWith('/attendance/') && next !== '/attendance/report') {
+        return '/admin/sites';
+      }
+    }
+
+    return next;
+  }
+
   async function handleLogin() {
+    if (loading) return;
     setMessage('');
 
     if (!Number.isFinite(userIdNum) || password.trim().length === 0) {
@@ -96,6 +124,7 @@ function LoginPageInner() {
       return;
     }
 
+    setLoading(true);
     try {
       const res = await apiFetch<AuthLoginResponse>(
         `${getApiBaseUrl()}/api/auth/login`,
@@ -110,9 +139,6 @@ function LoginPageInner() {
         return;
       }
 
-      // ✅ Bearer 토큰 저장(탭 단위)
-      sessionStorage.setItem('accessToken', res.accessToken);
-
       const parsed = parseJwtUser(res.accessToken);
       if (!parsed) {
         setMessage('로그인 응답을 해석할 수 없습니다.');
@@ -122,15 +148,27 @@ function LoginPageInner() {
       // ✅ role 기반 UI를 위해 user 저장 + token 저장
       login(parsed, res.accessToken);
 
-      const next = getSafeNext();
+      const next = normalizeNext(getSafeNext(), parsed.role);
 
-      // 기본 랜딩: ADMIN은 월별 근태 목록으로, 그 외는 출/퇴근으로
+      // ✅ 기본 랜딩
+      // - ADMIN/MANAGER: 관리자 화면(통합 페이지)
+      // - EMPLOYEE: 출/퇴근
       const defaultAfterLogin =
-        parsed.role === 'ADMIN' ? '/attendance/monthly' : '/attendance';
+        parsed.role === 'ADMIN' || parsed.role === 'MANAGER'
+          ? '/admin/sites'
+          : '/attendance';
 
       router.replace(next ?? defaultAfterLogin);
-    } catch (e) {
+    } catch (e: unknown) {
+      // 로그인 실패(401)는 전역 unauthorized 이벤트를 타지 않도록 client.ts에서 제외 처리됨
+      if (e instanceof ApiError && e.httpStatus === 401) {
+        setMessage('사번 또는 비밀번호가 올바르지 않습니다.');
+        return;
+      }
+
       setMessage(toUserMessage(e));
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -138,41 +176,54 @@ function LoginPageInner() {
     <main className="flex min-h-screen flex-col items-center justify-center gap-4">
       <h1 className="text-2xl font-bold">로그인</h1>
 
-      <div className="flex w-full max-w-xs flex-col gap-2">
-        <label className="text-sm text-gray-700">사번</label>
-        <input
-          type="number"
-          placeholder="사번 입력"
-          className="rounded border px-4 py-2"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-        />
-      </div>
-
-      <div className="flex w-full max-w-xs flex-col gap-2">
-        <label className="text-sm text-gray-700">비밀번호</label>
-        <input
-          type="password"
-          placeholder="비밀번호 입력"
-          className="rounded border px-4 py-2"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </div>
-
-      <button
-        onClick={handleLogin}
-        className="rounded bg-blue-600 px-6 py-2 text-white disabled:opacity-50"
-        disabled={!canSubmit}
+      <form
+        className="flex w-full max-w-xs flex-col gap-4"
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          void handleLogin();
+        }}
       >
-        로그인
-      </button>
+        <div className="flex flex-col gap-2">
+          <label className="text-sm text-gray-700">사번</label>
+          <input
+            type="number"
+            placeholder="사번 입력"
+            className="rounded border px-4 py-2"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            disabled={loading}
+            inputMode="numeric"
+          />
+        </div>
 
-      {message ? (
-        <p className="max-w-xs text-center text-sm text-red-600">{message}</p>
-      ) : null}
+        <div className="flex flex-col gap-2">
+          <label className="text-sm text-gray-700">비밀번호</label>
+          <input
+            type="password"
+            placeholder="비밀번호 입력"
+            className="rounded border px-4 py-2"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+          />
+        </div>
 
-      <p className="text-xs text-gray-500">사번/비밀번호로 로그인합니다.</p>
+        <button
+          type="submit"
+          className="rounded bg-blue-600 px-6 py-2 text-white disabled:opacity-50"
+          disabled={!canSubmit || loading}
+        >
+          {loading ? '로그인 중…' : '로그인'}
+        </button>
+
+        {message ? (
+          <p className="text-center text-sm text-red-600">{message}</p>
+        ) : null}
+
+        <p className="text-center text-xs text-gray-500">
+          사번/비밀번호로 로그인합니다.
+        </p>
+      </form>
     </main>
   );
 }
