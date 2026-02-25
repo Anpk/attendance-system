@@ -4,7 +4,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import AppHeader from '@/app/_components/AppHeader';
-import CorrectionRequestModal from '@/app/_components/CorrectionRequestModal';
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
 import Link from 'next/link';
@@ -46,7 +45,6 @@ export default function AttendanceMonthPage() {
   const [items, setItems] = useState<AttendanceListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [selected, setSelected] = useState<AttendanceListItem | null>(null);
   const [toast, setToast] = useState<string>('');
 
   function formatHm(iso: string | null): string {
@@ -115,6 +113,13 @@ export default function AttendanceMonthPage() {
             />
           </label>
         </div>
+        <div className="mt-3 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+          ✅ 정정 신청 기능은{' '}
+          <Link href="/attendance/report" className="underline">
+            리포트
+          </Link>{' '}
+          페이지로 이동했습니다. 월별 페이지는 추후 폐지될 예정입니다.
+        </div>
 
         {loading && (
           <p className="mt-4 text-sm text-gray-600" aria-busy="true">
@@ -168,15 +173,13 @@ export default function AttendanceMonthPage() {
                           </span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        className="rounded bg-gray-900 px-2 py-1 text-xs text-white hover:bg-black disabled:opacity-50"
-                        onClick={() => setSelected(it)}
-                        disabled={loading}
-                        aria-label={`${it.workDate} 근태 정정 요청`}
+                      <Link
+                        href="/attendance/report"
+                        className="rounded bg-gray-900 px-2 py-1 text-xs text-white hover:bg-black"
+                        aria-label="리포트에서 정정 요청"
                       >
-                        정정 요청
-                      </button>
+                        리포트에서 정정
+                      </Link>
                     </div>
                   </div>
                 </li>
@@ -185,23 +188,6 @@ export default function AttendanceMonthPage() {
           </section>
         )}
       </main>
-
-      {user && selected && (
-        <CorrectionRequestModal
-          open={!!selected}
-          onClose={() => setSelected(null)}
-          baseUrl={baseUrl}
-          attendanceId={selected.attendanceId}
-          workDate={selected.workDate}
-          initialCheckInAt={selected.checkInAt}
-          initialCheckOutAt={selected.checkOutAt}
-          // 생성 성공 시 현재 month 기준으로 재조회
-          onCreated={() => {
-            setToast('정정 요청이 접수되었습니다.');
-            fetchMonth(month);
-          }}
-        />
-      )}
     </div>
   );
 }
