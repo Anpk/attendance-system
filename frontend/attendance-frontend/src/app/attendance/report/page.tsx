@@ -1,10 +1,13 @@
 'use client';
 
 import AppHeader from '@/app/_components/AppHeader';
+import CorrectionRequestModal from '@/app/_components/CorrectionRequestModal';
 import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
 import { toUserMessage } from '@/lib/api/error-messages';
 import { fetchAttendanceReport } from '@/lib/api/attendance-report';
-import type { AttendanceReportResponse } from '@/lib/api/types';
+import { adminListSites } from '@/lib/api/admin';
+import type { AttendanceReportResponse, AdminSiteResponse, EmployeeRole } from '@/lib/api/types';
+import ReportTab from '@/app/admin/sites/_components/ReportTab';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 
 function pad2(n: number): string {
@@ -58,6 +61,14 @@ function AttendanceReportPageInner() {
   const { user, ready, forbidden } = useRequireAuth();
   const { message, setFlashMessage, clearMessage } = useFlashMessage();
 
+  const baseUrl = useMemo(() => {
+    return process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+  }, []);
+
+  const role = (user?.role ?? 'EMPLOYEE') as EmployeeRole;
+  const isEmployee = role === 'EMPLOYEE';
+  const isAdminOrManager = role === 'ADMIN' || role === 'MANAGER';
+
   const defaults = useMemo(() => {
     const now = new Date();
     const from = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -69,11 +80,26 @@ function AttendanceReportPageInner() {
 
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AttendanceReportResponse | null>(null);
+  const [adminSites, setAdminSites] = useState<AdminSiteResponse[]>([]);
 
   const [onlyMissingCheckout, setOnlyMissingCheckout] = useState(false);
   const [onlyCorrected, setOnlyCorrected] = useState(false);
 
   const [applySummaryFilter, setApplySummaryFilter] = useState(true);
+
+  const [selectedAttendance, setSelectedAttendance] = useState<{
+    attendanceId: number;
+    workDate: string;
+    checkInAt: string | null;
+    checkOutAt: string | null;
+  } | null>(null);
+  const [toast, setToast] = useState<string>('');
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(''), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const invalidRange = useMemo(() => {
     if (!from || !to) return false;
@@ -216,9 +242,32 @@ function AttendanceReportPageInner() {
   useEffect(() => {
     if (!ready) return;
     if (!user) return;
+    if (!isEmployee) return;
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, user]);
+  }, [ready, user, isEmployee]);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!user) return;
+    if (forbidden) return;
+    if (!isAdminOrManager) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await adminListSites();
+        if (!cancelled) setAdminSites(s);
+      } catch (e) {
+        if (!cancelled) setFlashMessage(toUserMessage(e));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, user, forbidden, isAdminOrManager]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -244,7 +293,26 @@ function AttendanceReportPageInner() {
           </div>
         )}
 
-        <section className="mb-4 rounded border bg-white p-4">
+        {!forbidden && toast && (
+          <div className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+            ✅ {toast}
+          </div>
+        )}
+
+        {!forbidden && isAdminOrManager && (
+          <div className="mb-4">
+            <ReportTab
+              user={user ? { userId: user.userId, role: user.role as EmployeeRole } : null}
+              ready={ready}
+              forbidden={forbidden}
+              sites={adminSites}
+              setFlashMessage={setFlashMessage}
+            />
+          </div>
+        )}
+
+        {!forbidden && isEmployee && (
+          <section className="mb-4 rounded border bg-white p-4">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <div className="text-xs text-gray-700">프리셋</div>
 
@@ -426,8 +494,10 @@ function AttendanceReportPageInner() {
             * 평균 근무 시간은 제공하지 않습니다(요구사항 제외).
           </div>
         </section>
+        )}
 
-        <section className="rounded border bg-white p-4">
+        {!forbidden && isEmployee && (
+          <section className="rounded border bg-white p-4">
           {!data ? (
             <div className="text-sm text-gray-600">조회 결과가 없습니다.</div>
           ) : (
@@ -491,6 +561,7 @@ function AttendanceReportPageInner() {
                         <th className="p-2">퇴근</th>
                         <th className="p-2">근무</th>
                         <th className="p-2">정정</th>
+                        <th className="p-2">정정 요청</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -505,6 +576,23 @@ function AttendanceReportPageInner() {
                               : formatMinutes(x.workMinutes)}
                           </td>
                           <td className="p-2">{x.isCorrected ? 'Y' : '-'}</td>
+                          <td className="p-2">
+                            <button
+                              type="button"
+                              className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                              onClick={() =>
+                                setSelectedAttendance({
+                                  attendanceId: x.attendanceId,
+                                  workDate: x.workDate,
+                                  checkInAt: x.checkInAt,
+                                  checkOutAt: x.checkOutAt,
+                                })
+                              }
+                              disabled={loading}
+                            >
+                              정정 요청
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -514,6 +602,23 @@ function AttendanceReportPageInner() {
             </>
           )}
         </section>
+        )}
+
+        {!forbidden && isEmployee && user && selectedAttendance && (
+          <CorrectionRequestModal
+            open={!!selectedAttendance}
+            onClose={() => setSelectedAttendance(null)}
+            baseUrl={baseUrl}
+            attendanceId={selectedAttendance.attendanceId}
+            workDate={selectedAttendance.workDate}
+            initialCheckInAt={selectedAttendance.checkInAt}
+            initialCheckOutAt={selectedAttendance.checkOutAt}
+            onCreated={() => {
+              setToast('정정 요청이 접수되었습니다.');
+              void load();
+            }}
+          />
+        )}
       </main>
     </div>
   );
