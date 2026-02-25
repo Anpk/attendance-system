@@ -1,4 +1,5 @@
 import { ApiError, ApiErrorResponse } from './types';
+
 type RequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown; // JSON 자동 stringify
 };
@@ -85,7 +86,16 @@ export async function apiFetch<T>(
   const payload = await parseJsonSafe(res);
 
   // ✅ 401(UNAUTHORIZED) 전역 처리: 토큰 만료/무효 시 단일 지점에서 로그인 UX로 유도
-  if (res.status === 401) {
+  // - 로그인 시도(/api/auth/login)에서의 401은 "자격증명 불일치"일 수 있으므로 전역 처리에서 제외
+  const isAuthLoginEndpoint = (() => {
+    try {
+      return url.includes('/api/auth/login');
+    } catch {
+      return false;
+    }
+  })();
+
+  if (res.status === 401 && !isAuthLoginEndpoint) {
     const msg =
       isApiErrorResponse(payload) && payload.code === 'UNAUTHORIZED'
         ? payload.message
