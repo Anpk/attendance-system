@@ -51,13 +51,11 @@ public class CorrectionRequestService {
 
     @Transactional
     public CorrectionRequestResponse create(Long userId, Long attendanceId, CorrectionRequestCreateRequest req) {
-        // 1) Attendance 조회 + 본인 스코프 강제
+        // 1) Attendance 조회 + 권한(본인 또는 ADMIN/MANAGER 대리 신청) 검사
         var attendance = attendanceRepository.findById(attendanceId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ATTENDANCE_NOT_FOUND, "근태 정보를 찾을 수 없습니다."));
 
-        if (!attendance.getUserId().equals(userId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
-        }
+        ensureCanCreateForAttendance(userId, attendance.getUserId());
 
         // 2) 당월만 허용(Attendance.workDate 기준)
         YearMonth target = YearMonth.from(attendance.getWorkDate());
@@ -123,6 +121,35 @@ public class CorrectionRequestService {
                 saved.getProposedCheckOutAt(),
                 saved.getReason()
         );
+    }
+
+    /**
+     * 정정 신청 생성 권한:
+     * - 본인(attendance.userId == actor) 허용
+     * - ADMIN: 전체 허용
+     * - MANAGER: manager_site_assignments 범위(site) 내 직원의 attendance에 한해 허용
+     */
+    private void ensureCanCreateForAttendance(Long actorUserId, Long attendanceUserId) {
+        if (attendanceUserId != null && attendanceUserId.equals(actorUserId)) return;
+
+        var me = employeeRepository.findById(actorUserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다."));
+        if (!me.isActive()) {
+            throw new BusinessException(ErrorCode.EMPLOYEE_INACTIVE, "비활성 사용자입니다.");
+        }
+
+        if (me.getRole() == EmployeeRole.ADMIN) return;
+
+        if (me.getRole() == EmployeeRole.MANAGER) {
+            var target = employeeRepository.findById(attendanceUserId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND, "직원을 찾을 수 없습니다."));
+            if (!managerSiteAssignmentRepository.existsByManagerUserIdAndSiteId(actorUserId, target.getSiteId())) {
+                throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
+            }
+            return;
+        }
+
+        throw new BusinessException(ErrorCode.FORBIDDEN, "권한이 없습니다.");
     }
 
     @Transactional(readOnly = true)
