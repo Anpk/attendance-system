@@ -6,7 +6,11 @@ import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
 import { toUserMessage } from '@/lib/api/error-messages';
 import { fetchAttendanceReport } from '@/lib/api/attendance-report';
 import { adminListSites } from '@/lib/api/admin';
-import type { AttendanceReportResponse, AdminSiteResponse, EmployeeRole } from '@/lib/api/types';
+import type {
+  AttendanceReportResponse,
+  AdminSiteResponse,
+  EmployeeRole,
+} from '@/lib/api/types';
 import ReportTab from '@/app/admin/sites/_components/ReportTab';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 
@@ -270,31 +274,33 @@ function AttendanceReportPageInner() {
   }, [ready, user, forbidden, isAdminOrManager]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
       <AppHeader />
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
         <div className="mb-4">
-          <h1 className="text-xl font-semibold">근태 리포트</h1>
-          <div className="mt-1 text-xs text-gray-600">
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            근태 리포트
+          </h1>
+          <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">
             기간(from~to) 동안의 근무일/총 근무시간을 확인합니다.
           </div>
         </div>
 
         {ready && forbidden && (
-          <div className="mb-4 rounded border bg-white p-4 text-sm">
+          <div className="mb-4 rounded border bg-white p-4 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
             권한이 없습니다.
           </div>
         )}
 
         {message && (
-          <div className="mb-4 rounded border bg-white px-3 py-2 text-sm">
+          <div className="mb-4 rounded border bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
             {message}
           </div>
         )}
 
         {!forbidden && toast && (
-          <div className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+          <div className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-900/30 dark:text-green-200">
             ✅ {toast}
           </div>
         )}
@@ -302,7 +308,11 @@ function AttendanceReportPageInner() {
         {!forbidden && isAdminOrManager && (
           <div className="mb-4">
             <ReportTab
-              user={user ? { userId: user.userId, role: user.role as EmployeeRole } : null}
+              user={
+                user
+                  ? { userId: user.userId, role: user.role as EmployeeRole }
+                  : null
+              }
               ready={ready}
               forbidden={forbidden}
               sites={adminSites}
@@ -312,296 +322,324 @@ function AttendanceReportPageInner() {
         )}
 
         {!forbidden && isEmployee && (
-          <section className="mb-4 rounded border bg-white p-4">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <div className="text-xs text-gray-700">프리셋</div>
+          <section className="mb-4 rounded border bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="text-xs text-gray-700 dark:text-gray-200">
+                프리셋
+              </div>
 
-            <button
-              type="button"
-              className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-              disabled={loading}
-              onClick={() => {
-                const now = new Date();
-                const f = new Date(now.getFullYear(), now.getMonth(), 1);
-                const nf = toYmdLocal(f);
-                const nt = toYmdLocal(now);
-                setFrom(nf);
-                setTo(nt);
-                void load({ from: nf, to: nt });
-              }}
-            >
-              이번 달
-            </button>
-
-            <button
-              type="button"
-              className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-              disabled={loading}
-              onClick={() => {
-                const now = new Date();
-                const firstThisMonth = new Date(
-                  now.getFullYear(),
-                  now.getMonth(),
-                  1
-                );
-                const lastPrevMonth = addDays(firstThisMonth, -1);
-                const firstPrevMonth = new Date(
-                  lastPrevMonth.getFullYear(),
-                  lastPrevMonth.getMonth(),
-                  1
-                );
-                const nf = toYmdLocal(firstPrevMonth);
-                const nt = toYmdLocal(lastPrevMonth);
-                setFrom(nf);
-                setTo(nt);
-                void load({ from: nf, to: nt });
-              }}
-            >
-              지난 달
-            </button>
-
-            <button
-              type="button"
-              className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-              disabled={loading}
-              onClick={() => {
-                const now = new Date();
-                const nf = toYmdLocal(addDays(now, -6));
-                const nt = toYmdLocal(now);
-                setFrom(nf);
-                setTo(nt);
-                void load({ from: nf, to: nt });
-              }}
-            >
-              최근 7일
-            </button>
-
-            <button
-              type="button"
-              className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-              disabled={loading}
-              onClick={() => {
-                const now = new Date();
-                const nf = toYmdLocal(addDays(now, -29));
-                const nt = toYmdLocal(now);
-                setFrom(nf);
-                setTo(nt);
-                void load({ from: nf, to: nt });
-              }}
-            >
-              최근 30일
-            </button>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
-            <label className="text-xs text-gray-700">
-              from
-              <input
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              <button
+                type="button"
+                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
                 disabled={loading}
-              />
-            </label>
+                onClick={() => {
+                  const now = new Date();
+                  const f = new Date(now.getFullYear(), now.getMonth(), 1);
+                  const nf = toYmdLocal(f);
+                  const nt = toYmdLocal(now);
+                  setFrom(nf);
+                  setTo(nt);
+                  void load({ from: nf, to: nt });
+                }}
+              >
+                이번 달
+              </button>
 
-            <label className="text-xs text-gray-700">
-              to
-              <input
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                className="mt-1 w-full rounded border px-3 py-2 text-sm"
+              <button
+                type="button"
+                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
                 disabled={loading}
-              />
-            </label>
+                onClick={() => {
+                  const now = new Date();
+                  const firstThisMonth = new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    1
+                  );
+                  const lastPrevMonth = addDays(firstThisMonth, -1);
+                  const firstPrevMonth = new Date(
+                    lastPrevMonth.getFullYear(),
+                    lastPrevMonth.getMonth(),
+                    1
+                  );
+                  const nf = toYmdLocal(firstPrevMonth);
+                  const nt = toYmdLocal(lastPrevMonth);
+                  setFrom(nf);
+                  setTo(nt);
+                  void load({ from: nf, to: nt });
+                }}
+              >
+                지난 달
+              </button>
 
-            <button
-              type="button"
-              onClick={() => void load()}
-              disabled={loading || !ready || !user || invalidRange}
-              className="h-10 rounded border px-3 text-sm hover:bg-gray-50 disabled:opacity-50"
-            >
-              {loading ? '조회 중…' : '조회'}
-            </button>
-          </div>
-          {invalidRange && (
-            <div className="mt-2 text-[11px] text-red-600">
-              * from은 to보다 이후일 수 없습니다.
+              <button
+                type="button"
+                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                disabled={loading}
+                onClick={() => {
+                  const now = new Date();
+                  const nf = toYmdLocal(addDays(now, -6));
+                  const nt = toYmdLocal(now);
+                  setFrom(nf);
+                  setTo(nt);
+                  void load({ from: nf, to: nt });
+                }}
+              >
+                최근 7일
+              </button>
+
+              <button
+                type="button"
+                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                disabled={loading}
+                onClick={() => {
+                  const now = new Date();
+                  const nf = toYmdLocal(addDays(now, -29));
+                  const nt = toYmdLocal(now);
+                  setFrom(nf);
+                  setTo(nt);
+                  void load({ from: nf, to: nt });
+                }}
+              >
+                최근 30일
+              </button>
             </div>
-          )}
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-xs text-gray-700">
-              <input
-                type="checkbox"
-                checked={onlyMissingCheckout}
-                onChange={(e) => setOnlyMissingCheckout(e.target.checked)}
-                disabled={loading}
-              />
-              퇴근 누락만
-            </label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
+              <label className="text-xs text-gray-700 dark:text-gray-200">
+                from
+                <input
+                  type="date"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                  disabled={loading}
+                />
+              </label>
 
-            <label className="flex items-center gap-2 text-xs text-gray-700">
-              <input
-                type="checkbox"
-                checked={onlyCorrected}
-                onChange={(e) => setOnlyCorrected(e.target.checked)}
-                disabled={loading}
-              />
-              정정 포함만
-            </label>
-            <label className="flex items-center gap-2 text-xs text-gray-700">
-              <input
-                type="checkbox"
-                checked={applySummaryFilter}
-                onChange={(e) => setApplySummaryFilter(e.target.checked)}
-                disabled={loading || !data}
-              />
-              집계에도 필터 적용
-            </label>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => downloadCsv('displayed')}
-              disabled={
-                loading || !data || displayedItems.length === 0 || invalidRange
-              }
-              className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-            >
-              CSV(표시 {displayedItems.length}건)
-            </button>
+              <label className="text-xs text-gray-700 dark:text-gray-200">
+                to
+                <input
+                  type="date"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                  disabled={loading}
+                />
+              </label>
 
-            <button
-              type="button"
-              onClick={() => downloadCsv('all')}
-              disabled={
-                loading ||
-                !data ||
-                (data?.items?.length ?? 0) === 0 ||
-                invalidRange
-              }
-              className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-            >
-              CSV(전체 {data?.items?.length ?? 0}건)
-            </button>
-
-            <div className="text-[11px] text-gray-500">
-              * CSV(표시)는 현재 표시 중인 항목(필터 적용)만 다운로드합니다.
+              <button
+                type="button"
+                onClick={() => void load()}
+                disabled={loading || !ready || !user || invalidRange}
+                className="h-10 rounded border px-3 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+              >
+                {loading ? '조회 중…' : '조회'}
+              </button>
             </div>
-          </div>
+            {invalidRange && (
+              <div className="mt-2 text-[11px] text-red-600">
+                * from은 to보다 이후일 수 없습니다.
+              </div>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={onlyMissingCheckout}
+                  onChange={(e) => setOnlyMissingCheckout(e.target.checked)}
+                  disabled={loading}
+                />
+                퇴근 누락만
+              </label>
 
-          <div className="mt-2 text-[11px] text-gray-500">
-            * 평균 근무 시간은 제공하지 않습니다(요구사항 제외).
-          </div>
-        </section>
+              <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={onlyCorrected}
+                  onChange={(e) => setOnlyCorrected(e.target.checked)}
+                  disabled={loading}
+                />
+                정정 포함만
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                <input
+                  type="checkbox"
+                  checked={applySummaryFilter}
+                  onChange={(e) => setApplySummaryFilter(e.target.checked)}
+                  disabled={loading || !data}
+                />
+                집계에도 필터 적용
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => downloadCsv('displayed')}
+                disabled={
+                  loading ||
+                  !data ||
+                  displayedItems.length === 0 ||
+                  invalidRange
+                }
+                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+              >
+                CSV(표시 {displayedItems.length}건)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => downloadCsv('all')}
+                disabled={
+                  loading ||
+                  !data ||
+                  (data?.items?.length ?? 0) === 0 ||
+                  invalidRange
+                }
+                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+              >
+                CSV(전체 {data?.items?.length ?? 0}건)
+              </button>
+
+              <div className="text-[11px] text-gray-500 dark:text-gray-300">
+                * CSV(표시)는 현재 표시 중인 항목(필터 적용)만 다운로드합니다.
+              </div>
+            </div>
+
+            <div className="mt-2 text-[11px] text-gray-500 dark:text-gray-300">
+              * 평균 근무 시간은 제공하지 않습니다(요구사항 제외).
+            </div>
+          </section>
         )}
 
         {!forbidden && isEmployee && (
-          <section className="rounded border bg-white p-4">
-          {!data ? (
-            <div className="text-sm text-gray-600">조회 결과가 없습니다.</div>
-          ) : (
-            <>
-              <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
-                <div className="rounded border bg-gray-50 p-3">
-                  <div className="text-[11px] text-gray-600">기간</div>
-                  <div className="text-sm font-semibold">
-                    {data.from} ~ {data.to}
-                  </div>
-                </div>
-                <div className="rounded border bg-gray-50 p-3">
-                  <div className="text-[11px] text-gray-600">근무일</div>
-                  <div className="text-sm font-semibold">
-                    {data.totalDays}일
-                  </div>
-                </div>
-                <div className="rounded border bg-gray-50 p-3">
-                  <div className="text-[11px] text-gray-600">총 근무시간</div>
-                  <div className="text-sm font-semibold">
-                    {formatMinutes(summary.totalWorkMinutes)}
-                  </div>
-                </div>
-                <div className="rounded border bg-gray-50 p-3">
-                  <div className="text-[11px] text-gray-600">정정</div>
-                  <div className="text-sm font-semibold">
-                    {summary.correctedCount}건 ({summary.correctedRatePct}%)
-                  </div>
-                </div>
-                <div className="rounded border bg-gray-50 p-3">
-                  <div className="text-[11px] text-gray-600">퇴근 누락</div>
-                  <div className="text-sm font-semibold">
-                    {summary.missingCheckoutCount}건 (
-                    {summary.missingCheckoutRatePct}%)
-                  </div>
-                </div>
-                <div className="rounded border bg-gray-50 p-3">
-                  <div className="text-[11px] text-gray-600">유효 근무일</div>
-                  <div className="text-sm font-semibold">
-                    {summary.validWorkDays}일
-                  </div>
-                </div>
+          <section className="rounded border bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+            {!data ? (
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                조회 결과가 없습니다.
               </div>
-              {(onlyMissingCheckout || onlyCorrected) && (
-                <div className="mb-2 text-[11px] text-gray-600">
-                  표시: {displayedItems.length}건
-                  {onlyMissingCheckout ? ' · 퇴근 누락만' : ''}
-                  {onlyCorrected ? ' · 정정 포함만' : ''}
+            ) : (
+              <>
+                <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
+                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                    <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                      기간
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {data.from} ~ {data.to}
+                    </div>
+                  </div>
+                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                    <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                      근무일
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {data.totalDays}일
+                    </div>
+                  </div>
+                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                    <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                      총 근무시간
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {formatMinutes(summary.totalWorkMinutes)}
+                    </div>
+                  </div>
+                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                    <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                      정정
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {summary.correctedCount}건 ({summary.correctedRatePct}%)
+                    </div>
+                  </div>
+                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                    <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                      퇴근 누락
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {summary.missingCheckoutCount}건 (
+                      {summary.missingCheckoutRatePct}%)
+                    </div>
+                  </div>
+                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                    <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                      유효 근무일
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {summary.validWorkDays}일
+                    </div>
+                  </div>
                 </div>
-              )}
+                {(onlyMissingCheckout || onlyCorrected) && (
+                  <div className="mb-2 text-[11px] text-gray-600 dark:text-gray-300">
+                    표시: {displayedItems.length}건
+                    {onlyMissingCheckout ? ' · 퇴근 누락만' : ''}
+                    {onlyCorrected ? ' · 정정 포함만' : ''}
+                  </div>
+                )}
 
-              {displayedItems.length === 0 ? (
-                <div className="text-sm text-gray-600">항목이 없습니다.</div>
-              ) : (
-                <div className="overflow-auto">
-                  <table className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b bg-gray-50 text-left">
-                        <th className="p-2">일자</th>
-                        <th className="p-2">출근</th>
-                        <th className="p-2">퇴근</th>
-                        <th className="p-2">근무</th>
-                        <th className="p-2">정정</th>
-                        <th className="p-2">정정 요청</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayedItems.map((x) => (
-                        <tr key={x.attendanceId} className="border-b">
-                          <td className="p-2 font-medium">{x.workDate}</td>
-                          <td className="p-2">{formatIsoToHm(x.checkInAt)}</td>
-                          <td className="p-2">{formatIsoToHm(x.checkOutAt)}</td>
-                          <td className="p-2">
-                            {x.workMinutes == null
-                              ? '-'
-                              : formatMinutes(x.workMinutes)}
-                          </td>
-                          <td className="p-2">{x.isCorrected ? 'Y' : '-'}</td>
-                          <td className="p-2">
-                            <button
-                              type="button"
-                              className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
-                              onClick={() =>
-                                setSelectedAttendance({
-                                  attendanceId: x.attendanceId,
-                                  workDate: x.workDate,
-                                  checkInAt: x.checkInAt,
-                                  checkOutAt: x.checkOutAt,
-                                })
-                              }
-                              disabled={loading}
-                            >
-                              정정 요청
-                            </button>
-                          </td>
+                {displayedItems.length === 0 ? (
+                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                    항목이 없습니다.
+                  </div>
+                ) : (
+                  <div className="overflow-auto">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50 text-left dark:border-gray-700 dark:bg-gray-900">
+                          <th className="p-2">일자</th>
+                          <th className="p-2">출근</th>
+                          <th className="p-2">퇴근</th>
+                          <th className="p-2">근무</th>
+                          <th className="p-2">정정</th>
+                          <th className="p-2">정정 요청</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </section>
+                      </thead>
+                      <tbody>
+                        {displayedItems.map((x) => (
+                          <tr
+                            key={x.attendanceId}
+                            className="border-b border-gray-200 dark:border-gray-700"
+                          >
+                            <td className="p-2 font-medium">{x.workDate}</td>
+                            <td className="p-2">
+                              {formatIsoToHm(x.checkInAt)}
+                            </td>
+                            <td className="p-2">
+                              {formatIsoToHm(x.checkOutAt)}
+                            </td>
+                            <td className="p-2">
+                              {x.workMinutes == null
+                                ? '-'
+                                : formatMinutes(x.workMinutes)}
+                            </td>
+                            <td className="p-2">{x.isCorrected ? 'Y' : '-'}</td>
+                            <td className="p-2">
+                              <button
+                                type="button"
+                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                                onClick={() =>
+                                  setSelectedAttendance({
+                                    attendanceId: x.attendanceId,
+                                    workDate: x.workDate,
+                                    checkInAt: x.checkInAt,
+                                    checkOutAt: x.checkOutAt,
+                                  })
+                                }
+                                disabled={loading}
+                              >
+                                정정 요청
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
         )}
 
         {!forbidden && isEmployee && user && selectedAttendance && (
@@ -626,7 +664,9 @@ function AttendanceReportPageInner() {
 
 export default function AttendanceReportPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+    <Suspense
+      fallback={<div className="min-h-screen bg-gray-50 dark:bg-gray-900" />}
+    >
       <AttendanceReportPageInner />
     </Suspense>
   );

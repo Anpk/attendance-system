@@ -189,15 +189,17 @@ export default function CorrectionRequestModal({
       aria-modal="true"
       aria-busy={loading}
     >
-      <div className="w-full max-w-md rounded-lg bg-white p-4 shadow">
+      <div className="w-full max-w-md rounded-lg bg-white p-4 shadow text-gray-900 dark:bg-gray-800 dark:text-gray-100">
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">정정 요청</h2>
-            <p className="text-xs text-gray-500">대상 날짜: {workDate}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-300">
+              대상 날짜: {workDate}
+            </p>
           </div>
           <button
             type="button"
-            className="rounded px-2 py-1 hover:bg-gray-100"
+            className="rounded px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700"
             onClick={onClose}
             disabled={loading}
           >
@@ -208,7 +210,7 @@ export default function CorrectionRequestModal({
         <div className="mb-3">
           <label className="mb-1 block text-sm font-medium">정정 유형</label>
           <select
-            className="w-full rounded border px-3 py-2"
+            className="w-full rounded border px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             value={type}
             onChange={(e) => setType(e.target.value as CorrectionType)}
             disabled={loading}
@@ -226,12 +228,12 @@ export default function CorrectionRequestModal({
             </label>
             <input
               type="time"
-              className="w-full rounded border px-3 py-2"
+              className="w-full rounded border px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               value={checkInLocal}
               onChange={(e) => setCheckInLocal(e.target.value)}
               disabled={loading}
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">
               현재 출근:{' '}
               {initialCheckInAt ? isoToLocalTime(initialCheckInAt) : '--:--'}
             </p>
@@ -245,12 +247,12 @@ export default function CorrectionRequestModal({
             </label>
             <input
               type="time"
-              className="w-full rounded border px-3 py-2"
+              className="w-full rounded border px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               value={checkOutLocal}
               onChange={(e) => setCheckOutLocal(e.target.value)}
               disabled={loading}
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">
               현재 퇴근:{' '}
               {initialCheckOutAt ? isoToLocalTime(initialCheckOutAt) : '--:--'}
             </p>
@@ -260,7 +262,7 @@ export default function CorrectionRequestModal({
         <div className="mb-3">
           <label className="mb-1 block text-sm font-medium">사유</label>
           <textarea
-            className="w-full rounded border px-3 py-2"
+            className="w-full rounded border px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             rows={3}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -268,12 +270,14 @@ export default function CorrectionRequestModal({
             placeholder="정정 사유를 입력하세요"
           />
           {!loading && missingHint && (
-            <p className="mt-1 text-xs text-gray-500">{missingHint}</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">
+              {missingHint}
+            </p>
           )}
         </div>
 
         {message && (
-          <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm">
+          <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-900/30 dark:text-red-200">
             ❌ {message}
           </div>
         )}
@@ -281,7 +285,7 @@ export default function CorrectionRequestModal({
         <div className="flex gap-2">
           <button
             type="button"
-            className="flex-1 rounded bg-gray-100 px-3 py-2 hover:bg-gray-200"
+            className="flex-1 rounded bg-gray-100 px-3 py-2 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
             onClick={onClose}
             disabled={loading}
           >
@@ -289,7 +293,7 @@ export default function CorrectionRequestModal({
           </button>
           <button
             type="button"
-            className="flex-1 rounded bg-black px-3 py-2 text-white disabled:opacity-50"
+            className="flex-1 rounded bg-black px-3 py-2 text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
             onClick={submit}
             disabled={!canSubmit || loading}
           >

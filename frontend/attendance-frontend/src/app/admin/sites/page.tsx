@@ -72,20 +72,24 @@ function AdminSitesPageInner() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
       <AppHeader />
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
         <div className="mb-4">
-          <h1 className="text-xl font-semibold">관리자</h1>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            관리자
+          </h1>
           <div className="mt-2 flex gap-2">
             {(['sites', 'employees', 'report'] as const).map((k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => setTabAndSync(k)}
-                className={`rounded border px-3 py-1 text-xs hover:bg-gray-50 ${
-                  tab === k ? 'bg-white' : 'bg-gray-50'
+                className={`rounded border px-3 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 ${
+                  tab === k
+                    ? 'bg-white dark:bg-gray-800'
+                    : 'bg-gray-50 dark:bg-gray-900'
                 }`}
               >
                 {tabLabel(k)}
@@ -95,13 +99,13 @@ function AdminSitesPageInner() {
         </div>
 
         {ready && forbidden && (
-          <div className="mb-4 rounded border bg-white p-4 text-sm">
+          <div className="mb-4 rounded border bg-white p-4 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
             권한이 없습니다. (ADMIN/MANAGER 전용)
           </div>
         )}
 
         {message && (
-          <div className="mb-4 rounded border bg-white px-3 py-2 text-sm">
+          <div className="mb-4 rounded border bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
             {message}
           </div>
         )}
@@ -220,7 +224,9 @@ function AdminSitesPageInner() {
 
 export default function AdminSitesPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+    <Suspense
+      fallback={<div className="min-h-screen bg-gray-50 dark:bg-gray-900" />}
+    >
       <AdminSitesPageInner />
     </Suspense>
   );

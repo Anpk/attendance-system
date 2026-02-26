@@ -486,7 +486,7 @@ function CorrectionDetailPageInner() {
   const showApproveReject = !!data && data.status === 'PENDING' && isApprover;
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
       <AppHeader />
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
@@ -494,12 +494,12 @@ function CorrectionDetailPageInner() {
           <h1 className="text-2xl font-bold">정정 요청 상세</h1>
           <button
             type="button"
-            className="rounded border px-3 py-1 text-sm"
+            className="rounded border px-3 py-1 text-sm dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
             onClick={() => router.push(backToListUrl)}
           >
             목록
           </button>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-500 dark:text-gray-300">
             {effectiveTab === 'approvable'
               ? '승인 대기 탭에서 진입'
               : '내 정정 요청 탭에서 진입'}
@@ -507,7 +507,10 @@ function CorrectionDetailPageInner() {
         </div>
 
         {loading && (
-          <p className="mt-4 text-sm text-gray-600" aria-busy="true">
+          <p
+            className="mt-4 text-sm text-gray-600 dark:text-gray-300"
+            aria-busy="true"
+          >
             불러오는 중...
           </p>
         )}
@@ -517,25 +520,27 @@ function CorrectionDetailPageInner() {
         )}
 
         {!loading && !error && !data && (
-          <p className="mt-4 text-sm text-gray-600">데이터가 없습니다.</p>
+          <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">
+            데이터가 없습니다.
+          </p>
         )}
 
         {!loading && !error && data && (
-          <section className="mt-4 rounded border p-4 text-sm">
+          <section className="mt-4 rounded border p-4 text-sm dark:border-gray-700 dark:bg-gray-800">
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-baseline gap-2">
                   <span className="font-medium">요청 #{data.requestId}</span>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-gray-500 dark:text-gray-300">
                     요청 시각 {fmtYmdHm(data.requestedAt)}
                   </span>
                 </div>
-                <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700">
+                <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-gray-900/50 dark:text-gray-200">
                   {data.status}
                 </span>
               </div>
 
-              <div className="text-gray-700">
+              <div className="text-gray-700 dark:text-gray-200">
                 <div>근태 ID: {data.attendanceId}</div>
                 <div>유형: {data.type}</div>
 
@@ -566,36 +571,36 @@ function CorrectionDetailPageInner() {
 
                   return (
                     <div className="mt-2">
-                      <div className="text-xs text-gray-600">
+                      <div className="text-xs text-gray-600 dark:text-gray-300">
                         대상 날짜: {targetDate}
                       </div>
                       {summaryParts.length > 0 ? (
-                        <div className="mt-1 text-xs text-gray-600">
+                        <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">
                           변경 요약: {summaryParts.join(' · ')}
                         </div>
                       ) : null}
 
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
-                        <div className="rounded border bg-gray-50 p-3">
-                          <div className="text-xs font-medium text-gray-700">
+                        <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                          <div className="text-xs font-medium text-gray-700 dark:text-gray-200">
                             제안 전
                           </div>
-                          <div className="mt-2 text-xs text-gray-700">
+                          <div className="mt-2 text-xs text-gray-700 dark:text-gray-200">
                             <div>출근: {baseIn ? fmtHm(baseIn) : '-'}</div>
                             <div>퇴근: {baseOut ? fmtHm(baseOut) : '-'}</div>
                             {!baseIn && !baseOut ? (
-                              <div className="mt-1 text-xs text-gray-500">
+                              <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">
                                 제안 전 시간이 응답에 포함되지 않았습니다.
                               </div>
                             ) : null}
                           </div>
                         </div>
 
-                        <div className="rounded border bg-white p-3">
-                          <div className="text-xs font-medium text-gray-700">
+                        <div className="rounded border bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                          <div className="text-xs font-medium text-gray-700 dark:text-gray-200">
                             제안
                           </div>
-                          <div className="mt-2 text-xs text-gray-700">
+                          <div className="mt-2 text-xs text-gray-700 dark:text-gray-200">
                             <div>출근: {propIn ? fmtHm(propIn) : '-'}</div>
                             <div>퇴근: {propOut ? fmtHm(propOut) : '-'}</div>
                           </div>
@@ -608,7 +613,7 @@ function CorrectionDetailPageInner() {
 
               <div className="mt-2">
                 <div className="font-medium">사유</div>
-                <p className="mt-1 whitespace-pre-wrap rounded bg-gray-50 p-3">
+                <p className="mt-1 whitespace-pre-wrap rounded bg-gray-50 p-3 dark:bg-gray-900">
                   {data.reason ?? '-'}
                 </p>
               </div>
@@ -616,7 +621,7 @@ function CorrectionDetailPageInner() {
               {data.status === 'REJECTED' && data.rejectReason ? (
                 <div className="mt-2">
                   <div className="font-medium">반려 사유</div>
-                  <p className="mt-1 whitespace-pre-wrap rounded bg-red-50 p-3">
+                  <p className="mt-1 whitespace-pre-wrap rounded bg-red-50 p-3 dark:bg-red-900/30 dark:text-red-200">
                     {data.rejectReason}
                   </p>
                 </div>
@@ -625,26 +630,26 @@ function CorrectionDetailPageInner() {
               {data.status === 'APPROVED' && data.approveComment ? (
                 <div className="mt-2">
                   <div className="font-medium">승인 코멘트</div>
-                  <p className="mt-1 whitespace-pre-wrap rounded bg-green-50 p-3">
+                  <p className="mt-1 whitespace-pre-wrap rounded bg-green-50 p-3 dark:bg-green-900/30 dark:text-green-200">
                     {data.approveComment}
                   </p>
                 </div>
               ) : null}
 
               {showApproveReject ? (
-                <div className="mt-4 rounded border bg-gray-50 p-3">
+                <div className="mt-4 rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
                   <div className="font-medium">승인 처리</div>
-                  <p className="mt-1 text-xs text-gray-600">
+                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
                     반려 시 사유 입력이 필요합니다.
                   </p>
 
-                  <label className="mt-3 block text-xs text-gray-700">
+                  <label className="mt-3 block text-xs text-gray-700 dark:text-gray-200">
                     코멘트 / 반려 사유
                   </label>
                   <textarea
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     rows={3}
                     placeholder="(선택) 승인 코멘트 또는 (필수) 반려 사유를 입력하세요"
                     disabled={busy !== null}
@@ -653,7 +658,7 @@ function CorrectionDetailPageInner() {
                   <div className="mt-3 flex items-center gap-2">
                     <button
                       type="button"
-                      className="rounded bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-60"
+                      className="rounded bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-blue-500"
                       onClick={approveRequest}
                       disabled={busy !== null}
                       aria-busy={busy === 'approve'}
@@ -663,7 +668,7 @@ function CorrectionDetailPageInner() {
 
                     <button
                       type="button"
-                      className="rounded bg-gray-800 px-3 py-2 text-sm text-white disabled:opacity-60"
+                      className="rounded bg-gray-800 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-gray-700"
                       onClick={rejectRequest}
                       disabled={busy !== null}
                       aria-busy={busy === 'reject'}
@@ -671,7 +676,7 @@ function CorrectionDetailPageInner() {
                       {busy === 'reject' ? '반려 처리 중...' : '반려'}
                     </button>
 
-                    <span className="text-xs text-gray-600">
+                    <span className="text-xs text-gray-600 dark:text-gray-300">
                       처리 후 목록으로 이동합니다.
                     </span>
                   </div>
@@ -682,7 +687,7 @@ function CorrectionDetailPageInner() {
                 <div className="mt-4 flex items-center gap-2">
                   <button
                     type="button"
-                    className="rounded bg-red-600 px-3 py-2 text-sm text-white disabled:opacity-60"
+                    className="rounded bg-red-600 px-3 py-2 text-sm text-white disabled:opacity-60 dark:bg-red-500"
                     onClick={cancelRequest}
                     disabled={busy !== null}
                     aria-busy={busy === 'cancel'}
@@ -690,7 +695,7 @@ function CorrectionDetailPageInner() {
                     {busy === 'cancel' ? '취소 처리 중...' : '요청 취소'}
                   </button>
 
-                  <span className="text-xs text-gray-600">
+                  <span className="text-xs text-gray-600 dark:text-gray-300">
                     취소 후에는 목록에서 다시 확인해 주세요.
                   </span>
                 </div>
@@ -705,7 +710,9 @@ function CorrectionDetailPageInner() {
 
 export default function CorrectionDetailPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+    <Suspense
+      fallback={<div className="min-h-screen bg-gray-50 dark:bg-gray-900" />}
+    >
       <CorrectionDetailPageInner />
     </Suspense>
   );

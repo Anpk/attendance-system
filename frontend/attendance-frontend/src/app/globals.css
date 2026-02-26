@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 :root {
   --background: #ffffff;
@@ -23,4 +23,103 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/*
+  모바일(iOS) 다크모드에서 가독성 저하 방지용 베이스 스타일
+  - Tailwind dark: variant는 기본 설정(media) 기준으로 동작
+  - 개별 컴포넌트에서 dark:를 달지 않아도 최소한의 대비를 확보
+*/
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-white text-gray-900;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    body {
+      @apply bg-gray-900 text-gray-100;
+    }
+
+    /*
+      다크모드인데 bg-white를 강제로 쓰는 컴포넌트가 있으면
+      밝은 글자(--foreground)와 충돌하여 텍스트가 안 보이는 문제가 생김.
+      -> 공통 유틸리티 클래스 최소 override로 전체 가독성 확보
+    */
+    .bg-white {
+      background-color: #111827; /* gray-900 */
+    }
+
+    /* 자주 쓰는 밝은 배경 유틸도 다크에서 어둡게 보정 */
+    .bg-gray-50 {
+      background-color: #111827; /* gray-900 */
+    }
+    .bg-gray-100 {
+      background-color: #1f2937; /* gray-800 */
+    }
+    .bg-gray-200 {
+      background-color: #1f2937; /* gray-800 */
+    }
+
+    /* 자주 쓰는 회색 텍스트 계열 대비 보강 */
+    .text-gray-500 {
+      color: #d1d5db; /* gray-300 */
+    }
+    .text-gray-600 {
+      color: #e5e7eb; /* gray-200 */
+    }
+    .text-gray-700 {
+      color: #f3f4f6; /* gray-100 */
+    }
+    .text-gray-800 {
+      color: #f9fafb; /* gray-50 */
+    }
+    .text-gray-900 {
+      color: #ffffff;
+    }
+
+    .text-gray-300 {
+      color: #e5e7eb; /* gray-200 */
+    }
+    .text-gray-400 {
+      color: #d1d5db; /* gray-300 */
+    }
+
+    /* 테두리도 다크에서 너무 옅게/진하게 보이지 않게 보정 */
+    .border,
+    .border-gray-200,
+    .border-gray-300 {
+      border-color: #374151; /* gray-700 */
+    }
+
+    /* 폼 컨트롤(입력/선택) 기본 대비 보정 */
+    input,
+    textarea,
+    select {
+      color: #f9fafb; /* gray-50 */
+      background-color: #111827; /* gray-900 */
+      border-color: #374151; /* gray-700 */
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: #9ca3af; /* gray-400 */
+    }
+
+    /* disabled 요소가 너무 흐려져 '안 보이는' 문제 완화 */
+    :disabled {
+      opacity: 0.65;
+    }
+
+    /* hover 배경이 너무 밝게 튀는 경우 완화 */
+    .hover\:bg-gray-50:hover,
+    .hover\:bg-gray-100:hover {
+      background-color: #1f2937; /* gray-800 */
+    }
+  }
 }

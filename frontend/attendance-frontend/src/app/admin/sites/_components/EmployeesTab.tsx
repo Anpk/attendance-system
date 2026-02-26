@@ -155,22 +155,22 @@ export default function EmployeesTab(props: {
   } = props.assignments;
 
   return (
-    <section className="rounded border bg-white p-4">
+    <section className="rounded border bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
       {canCreateEmployee && (
-        <div className="mb-6 rounded border bg-white p-3">
+        <div className="mb-6 rounded border bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-sm font-semibold">직원 생성</div>
             <button
               type="button"
               onClick={() => setIsCreateEmployeeOpen((v) => !v)}
-              className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+              className="rounded border px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
             >
               {isCreateEmployeeOpen ? '접기' : '펼치기'}
             </button>
           </div>
 
           {!isCreateEmployeeOpen ? (
-            <div className="text-xs text-gray-600">
+            <div className="text-xs text-gray-600 dark:text-gray-300">
               * 필요 시 펼쳐서 신규 직원을 생성하세요. (ADMIN 전용)
             </div>
           ) : (
@@ -182,36 +182,36 @@ export default function EmployeesTab(props: {
                 void submitCreateEmployee();
               }}
             >
-              <label className="text-xs text-gray-700">
+              <label className="text-xs text-gray-700 dark:text-gray-200">
                 userId
                 <input
                   ref={createEmpUserIdRef}
                   value={createEmpUserId}
                   onChange={(e) => setCreateEmpUserId(e.target.value)}
-                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                   inputMode="numeric"
                   placeholder="예: 200"
                   disabled={loading}
                 />
               </label>
 
-              <label className="text-xs text-gray-700">
+              <label className="text-xs text-gray-700 dark:text-gray-200">
                 username
                 <input
                   value={createEmpUsername}
                   onChange={(e) => setCreateEmpUsername(e.target.value)}
-                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                   placeholder="예: user-200"
                   disabled={loading}
                 />
               </label>
 
-              <label className="text-xs text-gray-700">
+              <label className="text-xs text-gray-700 dark:text-gray-200">
                 password
                 <input
                   value={createEmpPassword}
                   onChange={(e) => setCreateEmpPassword(e.target.value)}
-                  className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                   placeholder="예: pw200"
                   type="password"
                   disabled={loading}
@@ -219,12 +219,12 @@ export default function EmployeesTab(props: {
               </label>
 
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs text-gray-700">
+                <label className="text-xs text-gray-700 dark:text-gray-200">
                   siteId
                   <select
                     value={createEmpSiteId}
                     onChange={(e) => setCreateEmpSiteId(e.target.value)}
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm disabled:opacity-50"
+                    className="mt-1 w-full rounded border px-3 py-2 text-sm disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                     disabled={loading || sites.length === 0}
                   >
                     {sites.length === 0 ? (
@@ -244,7 +244,7 @@ export default function EmployeesTab(props: {
                       ))
                     )}
                   </select>
-                  <div className="mt-1 text-[11px] text-gray-500">
+                  <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-300">
                     * siteId는 선택 방식으로만 지정됩니다.
                   </div>
                   {(() => {
@@ -260,14 +260,14 @@ export default function EmployeesTab(props: {
                   })()}
                 </label>
 
-                <label className="text-xs text-gray-700">
+                <label className="text-xs text-gray-700 dark:text-gray-200">
                   role
                   <select
                     value={createEmpRole}
                     onChange={(e) =>
                       setCreateEmpRole(e.target.value as EmployeeRole)
                     }
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                     disabled={loading}
                   >
                     <option value="EMPLOYEE">EMPLOYEE</option>
@@ -279,12 +279,12 @@ export default function EmployeesTab(props: {
               <button
                 type="submit"
                 disabled={loading}
-                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
               >
                 {loading ? '생성 중…' : '생성'}
               </button>
 
-              <div className="text-[11px] text-gray-500">
+              <div className="text-[11px] text-gray-500 dark:text-gray-300">
                 * 직원 생성은 ADMIN 전용입니다.
               </div>
             </form>
@@ -295,12 +295,12 @@ export default function EmployeesTab(props: {
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold">직원 목록</h2>
         <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-700">
+          <label className="text-xs text-gray-700 dark:text-gray-200">
             site 필터
             <select
               value={empFilterSiteId}
               onChange={(e) => setEmpFilterSiteId(e.target.value)}
-              className="ml-2 rounded border px-2 py-1 text-xs"
+              className="ml-2 rounded border px-2 py-1 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
               disabled={sites.length === 0}
             >
               <option value="">전체</option>
@@ -315,7 +315,7 @@ export default function EmployeesTab(props: {
             type="button"
             onClick={refreshEmployees}
             disabled={loading}
-            className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+            className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
           >
             새로고침
           </button>
@@ -323,15 +323,15 @@ export default function EmployeesTab(props: {
       </div>
 
       {(user?.role === 'MANAGER' || user?.role === 'ADMIN') && (
-        <div className="mb-3 rounded border bg-white p-3">
+        <div className="mb-3 rounded border bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
           <div className="mb-2 text-sm font-semibold">직원 일괄 site 이동</div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs text-gray-700">
+            <label className="text-xs text-gray-700 dark:text-gray-200">
               대상 site
               <select
                 value={bulkTargetSiteId}
                 onChange={(e) => setBulkTargetSiteId(e.target.value)}
-                className="ml-2 rounded border px-2 py-1 text-xs disabled:opacity-50"
+                className="ml-2 rounded border px-2 py-1 text-xs disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                 disabled={sites.length === 0 || bulkMoving}
               >
                 <option value="">선택</option>
@@ -348,7 +348,7 @@ export default function EmployeesTab(props: {
               </select>
             </label>
 
-            <div className="text-[11px] text-gray-700">
+            <div className="text-[11px] text-gray-700 dark:text-gray-200">
               선택: {bulkSelectedUserIds.length}명
             </div>
 
@@ -359,7 +359,7 @@ export default function EmployeesTab(props: {
                 setBulkSelectedUserIds(ids);
               }}
               disabled={bulkMoving || bulkSelectableInView.length === 0}
-              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
             >
               전체 선택(현재 필터)
             </button>
@@ -368,7 +368,7 @@ export default function EmployeesTab(props: {
               type="button"
               onClick={() => void submitBulkMoveEmployees()}
               disabled={bulkMoving || bulkSelectedUserIds.length === 0}
-              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
             >
               일괄 이동
             </button>
@@ -377,19 +377,19 @@ export default function EmployeesTab(props: {
               type="button"
               onClick={() => setBulkSelectedUserIds([])}
               disabled={bulkMoving || bulkSelectedUserIds.length === 0}
-              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+              className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
             >
               선택 해제
             </button>
 
-            <div className="text-[11px] text-gray-500">
+            <div className="text-[11px] text-gray-500 dark:text-gray-300">
               * 목록에서 EMPLOYEE만 선택할 수 있습니다. (MANAGER는 서버에서
               담당(assignments) 범위로 추가 검증)
             </div>
           </div>
 
           {bulkSelectedEmployees.length > 0 ? (
-            <div className="mt-2 text-[11px] text-gray-600">
+            <div className="mt-2 text-[11px] text-gray-600 dark:text-gray-300">
               선택된 직원:{' '}
               {bulkSelectedEmployees
                 .slice(0, 10)
@@ -404,7 +404,7 @@ export default function EmployeesTab(props: {
       )}
 
       {filteredEmployees.length === 0 ? (
-        <div className="text-sm text-gray-600">표시할 직원이 없습니다.</div>
+        <div className="text-sm text-gray-600 dark:text-gray-300">표시할 직원이 없습니다.</div>
       ) : (
         <ul className="space-y-2">
           {filteredEmployees.map((x) => {
@@ -418,7 +418,7 @@ export default function EmployeesTab(props: {
             return (
               <li
                 key={x.userId}
-                className={`rounded border p-3 ${x.active ? '' : 'bg-gray-100 border-gray-300'}`}
+                className={`rounded border p-3 dark:border-gray-700 ${x.active ? '' : 'bg-gray-100 border-gray-300 dark:bg-gray-900/50 dark:border-gray-600'}`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-start gap-3">
@@ -447,15 +447,15 @@ export default function EmployeesTab(props: {
                       <div className="font-medium">
                         #{x.userId} · {x.role}
                         {(x as unknown as { username?: string }).username ? (
-                          <span className="ml-2 text-xs text-gray-600">
+                          <span className="ml-2 text-xs text-gray-600 dark:text-gray-300">
                             @{(x as unknown as { username?: string }).username}
                           </span>
                         ) : null}
                       </div>
-                      <div className="text-xs text-gray-600">
+                      <div className="text-xs text-gray-600 dark:text-gray-300">
                         active: {String(x.active)} · siteId: {x.siteId}
                         {!x.active ? (
-                          <span className="ml-2 rounded bg-gray-100 px-2 py-0.5 text-[11px]">
+                          <span className="ml-2 rounded bg-gray-100 px-2 py-0.5 text-[11px] dark:bg-gray-800">
                             비활성
                           </span>
                         ) : null}
@@ -474,14 +474,14 @@ export default function EmployeesTab(props: {
                                 `직원(#${x.userId})을 비활성화할까요?`
                               );
                               if (!ok) return;
-                            }
-                            void submitToggleActiveQuick(x.userId, !x.active);
-                          }}
-                          disabled={pendingActiveUserId === x.userId}
-                          className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-                        >
-                          {x.active ? '비활성' : '활성'}
-                        </button>
+                          }
+                          void submitToggleActiveQuick(x.userId, !x.active);
+                        }}
+                        disabled={pendingActiveUserId === x.userId}
+                        className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                      >
+                        {x.active ? '비활성' : '활성'}
+                      </button>
                       ) : null}
 
                       <button
@@ -619,7 +619,7 @@ export default function EmployeesTab(props: {
                               {mgrAssignedSiteIds.map((id) => (
                                 <span
                                   key={id}
-                                  className="rounded bg-gray-100 px-2 py-1 text-xs"
+                                  className="rounded bg-gray-100 px-2 py-1 text-xs dark:bg-gray-800"
                                 >
                                   {id}
                                 </span>
@@ -663,7 +663,7 @@ export default function EmployeesTab(props: {
                                 site 목록 로딩중...
                               </div>
                             ) : (
-                              <div className="max-h-40 overflow-auto rounded border p-2">
+                              <div className="max-h-40 overflow-auto rounded border p-2 dark:border-gray-700">
                                 <div className="grid gap-2">
                                   {(() => {
                                     const q = mgrSiteQuery.trim().toLowerCase();
