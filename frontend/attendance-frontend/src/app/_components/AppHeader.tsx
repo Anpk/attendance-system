@@ -25,7 +25,14 @@ export default function AppHeader() {
     try {
       logout();
     } finally {
-      router.replace('/login');
+      const loginUrl = '/login';
+      try {
+        // ✅ 현재 히스토리 엔트리를 login으로 교체하여 뒤로가기 혼선을 최소화
+        window.history.replaceState(null, '', loginUrl);
+      } catch {
+        // ignore
+      }
+      router.replace(loginUrl);
     }
   }
 
