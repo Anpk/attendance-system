@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch } from '@/lib/api/client';
-import type { AuthMeResponse } from '@/lib/api/types';
+import { ApiError, type AuthMeResponse } from '@/lib/api/types';
 
 type User = {
   userId: number;
@@ -91,6 +91,10 @@ function getApiBaseUrl(): string {
   return raw.replace(/\/+$/, '');
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
@@ -112,9 +116,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // login 페이지에서 reason 처리
       const nextPath = `${window.location.pathname}${window.location.search ?? ''}`;
-      router.replace(
-        `/login?reason=expired&next=${encodeURIComponent(nextPath)}`
-      );
+      const loginUrl = `/login?reason=expired&next=${encodeURIComponent(nextPath)}`;
+
+      // ✅ 뒤로가기(Back)로 보호 페이지로 복귀하는 것을 최소화: 현재 히스토리 엔트리를 login으로 교체
+      try {
+        window.history.replaceState(null, '', loginUrl);
+      } catch {
+        // ignore
+      }
+
+      router.replace(loginUrl);
 
       // 연속 호출 레이스 방지(짧은 락)
       setTimeout(() => {
@@ -123,8 +134,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     window.addEventListener('auth:unauthorized', onUnauthorized);
+
+    function onPageShow(ev: PageTransitionEvent) {
+      // BFCache 복원 시 세션이 이미 정리된 상태면 로그인으로 유도
+      if (!ev.persisted) return;
+      const token = window.sessionStorage.getItem(ACCESS_TOKEN_KEY);
+      if (token && token.trim().length > 0) return;
+
+      const nextPath = `${window.location.pathname}${window.location.search ?? ''}`;
+      const loginUrl = `/login?reason=expired&next=${encodeURIComponent(nextPath)}`;
+      try {
+        window.history.replaceState(null, '', loginUrl);
+      } catch {
+        // ignore
+      }
+      router.replace(loginUrl);
+    }
+
+    window.addEventListener('pageshow', onPageShow);
+
     return () => {
       window.removeEventListener('auth:unauthorized', onUnauthorized);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, [router]);
 
@@ -156,13 +187,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
         if (cancelled) return;
 
-        // ✅ role/userId는 서버 응답을 신뢰(만료/무효는 catch로 처리)
         const nextUser: User = { userId: me.userId, role: me.role };
         setUser(nextUser);
         localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
         setReady(true);
-      } catch {
-        // 만료/무효 토큰 등: 저장값 정리 후 비로그인 상태로 전환
+      } catch (e: unknown) {
+        // ✅ 401/403은 재시도 금지(토큰 만료/권한 문제)
+        const isAuthError =
+          e instanceof ApiError &&
+          (e.httpStatus === 401 || e.httpStatus === 403);
+
+        if (!isAuthError) {
+          // ✅ 네트워크/일시 장애/5xx 등: 1회 재시도
+          try {
+            await sleep(300);
+            const me2 = await apiFetch<AuthMeResponse>(
+              `${getApiBaseUrl()}/api/auth/me`
+            );
+            if (cancelled) return;
+
+            const nextUser: User = { userId: me2.userId, role: me2.role };
+            setUser(nextUser);
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+            setReady(true);
+            return;
+          } catch {
+            // fallthrough to clear
+          }
+        }
+
+        // 만료/무효 토큰 또는 재시도 실패: 저장값 정리 후 비로그인 상태로 전환
         localStorage.removeItem(AUTH_STORAGE_KEY);
         window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
         if (!cancelled) {
