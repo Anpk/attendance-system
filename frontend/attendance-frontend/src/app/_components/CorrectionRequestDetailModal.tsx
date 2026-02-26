@@ -91,18 +91,18 @@ export default function CorrectionRequestDetailModal({
       role="dialog"
       aria-modal="true"
     >
-      <div className="w-full max-w-lg rounded bg-white p-4 shadow">
+      <div className="w-full max-w-lg rounded bg-white p-4 shadow text-gray-900 dark:bg-gray-800 dark:text-gray-100">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">정정 요청 상세</h2>
-            <p className="mt-1 text-xs text-gray-600">
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
               요청 #{item.requestId} · 근태 #{item.attendanceId}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 text-sm hover:bg-gray-100"
+            className="rounded px-2 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             닫기
           </button>
@@ -110,29 +110,31 @@ export default function CorrectionRequestDetailModal({
 
         <div className="mt-4 space-y-2 text-sm">
           <div className="flex items-center justify-between">
-            <span className="text-gray-600">상태</span>
+            <span className="text-gray-600 dark:text-gray-300">상태</span>
             <span className="font-medium">{item.status}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-gray-600">유형</span>
+            <span className="text-gray-600 dark:text-gray-300">유형</span>
             <span className="font-medium">{item.type}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-gray-600">요청 시각</span>
+            <span className="text-gray-600 dark:text-gray-300">요청 시각</span>
             <span className="font-medium">{fmtIso(item.requestedAt)}</span>
           </div>
 
-          <div className="rounded border p-3">
-            <div className="text-xs font-semibold text-gray-700">제안 시간</div>
+          <div className="rounded border p-3 dark:border-gray-700">
+            <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+              제안 시간
+            </div>
             <div className="mt-2 flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span className="text-gray-600">출근</span>
+                <span className="text-gray-600 dark:text-gray-300">출근</span>
                 <span className="font-medium">
                   {fmtIso(item.proposedCheckInAt ?? null)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-gray-600">퇴근</span>
+                <span className="text-gray-600 dark:text-gray-300">퇴근</span>
                 <span className="font-medium">
                   {fmtIso(item.proposedCheckOutAt ?? null)}
                 </span>
@@ -140,16 +142,18 @@ export default function CorrectionRequestDetailModal({
             </div>
           </div>
 
-          <div className="rounded border p-3">
-            <div className="text-xs font-semibold text-gray-700">사유</div>
+          <div className="rounded border p-3 dark:border-gray-700">
+            <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+              사유
+            </div>
             <p className="mt-2 whitespace-pre-wrap text-sm">
               {item.reason && item.reason.trim().length > 0 ? item.reason : '-'}
             </p>
           </div>
 
           {(item.approveComment || item.rejectReason) && (
-            <div className="rounded border p-3">
-              <div className="text-xs font-semibold text-gray-700">
+            <div className="rounded border p-3 dark:border-gray-700">
+              <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
                 처리 코멘트
               </div>
               {item.approveComment && (
@@ -172,7 +176,7 @@ export default function CorrectionRequestDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded border px-3 py-2 text-sm hover:bg-gray-50"
+            className="rounded border px-3 py-2 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700"
           >
             닫기
           </button>
@@ -181,7 +185,7 @@ export default function CorrectionRequestDetailModal({
             onClick={handleCancel}
             disabled={!canCancel || submitting}
             aria-busy={submitting}
-            className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+            className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
           >
             {submitting ? '취소 중...' : '요청 취소'}
           </button>

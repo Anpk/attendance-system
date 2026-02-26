@@ -255,7 +255,7 @@ export default function ReportTab({
   }
 
   return (
-    <section className="rounded border bg-white p-4">
+    <section className="rounded border bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Site 근태 리포트</h2>
         <div className="flex items-center gap-2">
@@ -263,7 +263,7 @@ export default function ReportTab({
             type="button"
             onClick={() => void submitFetchReport()}
             disabled={reportLoading || reportInvalidRange}
-            className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+            className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
           >
             {reportLoading ? '조회 중…' : '조회'}
           </button>
@@ -271,7 +271,7 @@ export default function ReportTab({
             type="button"
             onClick={downloadCsv}
             disabled={!reportData || reportLoading}
-            className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
+            className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
           >
             CSV
           </button>
@@ -279,7 +279,7 @@ export default function ReportTab({
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
-        <label className="text-xs text-gray-700">
+        <label className="text-xs text-gray-700 dark:text-gray-200">
           from
           <input
             type="date"
@@ -288,12 +288,12 @@ export default function ReportTab({
               setReportFrom(e.target.value);
               setReportData(null);
             }}
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             disabled={reportLoading}
           />
         </label>
 
-        <label className="text-xs text-gray-700">
+        <label className="text-xs text-gray-700 dark:text-gray-200">
           to
           <input
             type="date"
@@ -302,14 +302,14 @@ export default function ReportTab({
               setReportTo(e.target.value);
               setReportData(null);
             }}
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             disabled={reportLoading}
           />
         </label>
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
-        <label className="text-xs text-gray-700">
+        <label className="text-xs text-gray-700 dark:text-gray-200">
           site
           <select
             value={reportSiteId}
@@ -319,7 +319,7 @@ export default function ReportTab({
               setReportData(null);
               setOpenEmployeeIds([]);
             }}
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             disabled={reportLoading}
           >
             <option value="">선택…</option>
@@ -332,12 +332,12 @@ export default function ReportTab({
           </select>
         </label>
 
-        <label className="text-xs text-gray-700">
+        <label className="text-xs text-gray-700 dark:text-gray-200">
           user
           <select
             value={reportUserId}
             onChange={(e) => setReportUserId(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
             disabled={reportLoading || !reportData}
           >
             <option value="">전체</option>
@@ -357,33 +357,33 @@ export default function ReportTab({
       )}
 
       {!reportData ? (
-        <div className="mt-4 text-sm text-gray-600">조회 결과가 없습니다.</div>
+        <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">조회 결과가 없습니다.</div>
       ) : (
         <>
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded border bg-gray-50 p-3">
-              <div className="text-[11px] text-gray-600">기간</div>
+            <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+              <div className="text-[11px] text-gray-600 dark:text-gray-300">기간</div>
               <div className="text-sm font-semibold">
                 {reportData.from} ~ {reportData.to}
               </div>
             </div>
-            <div className="rounded border bg-gray-50 p-3">
-              <div className="text-[11px] text-gray-600">직원 수</div>
+            <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+              <div className="text-[11px] text-gray-600 dark:text-gray-300">직원 수</div>
               <div className="text-sm font-semibold">
                 {filteredEmployees.length}명
               </div>
               {reportUserId ? (
-                <div className="mt-1 text-[11px] text-gray-600">
+                <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-300">
                   * 선택 직원만 표시 중
                 </div>
               ) : (
-                <div className="mt-1 text-[11px] text-gray-600">
+                <div className="mt-1 text-[11px] text-gray-600 dark:text-gray-300">
                   * 전체 {reportData.totalEmployees}명
                 </div>
               )}
             </div>
-            <div className="rounded border bg-gray-50 p-3">
-              <div className="text-[11px] text-gray-600">총 근무시간</div>
+            <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+              <div className="text-[11px] text-gray-600 dark:text-gray-300">총 근무시간</div>
               <div className="text-sm font-semibold">
                 {formatMinutes(
                   filteredEmployees.reduce(
@@ -393,8 +393,8 @@ export default function ReportTab({
                 )}
               </div>
             </div>
-            <div className="rounded border bg-gray-50 p-3">
-              <div className="text-[11px] text-gray-600">퇴근 누락</div>
+            <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+              <div className="text-[11px] text-gray-600 dark:text-gray-300">퇴근 누락</div>
               <div className="text-sm font-semibold">
                 {filteredEmployees.reduce(
                   (acc, e) => acc + (e.missingCheckoutCount ?? 0),
@@ -406,12 +406,12 @@ export default function ReportTab({
           </div>
 
           {filteredEmployees.length === 0 ? (
-            <div className="mt-4 text-sm text-gray-600">직원이 없습니다.</div>
+            <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">직원이 없습니다.</div>
           ) : (
             <div className="mt-4 overflow-auto">
               <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b bg-gray-50 text-left">
+                  <tr className="border-b border-gray-200 bg-gray-50 text-left dark:border-gray-700 dark:bg-gray-900">
                     <th className="p-2">직원</th>
                     <th className="p-2">role</th>
                     <th className="p-2">active</th>
@@ -428,7 +428,7 @@ export default function ReportTab({
                       const isOpen = openEmployeeIds.includes(e.userId);
                       return (
                         <Fragment key={e.userId}>
-                          <tr className="border-b">
+                          <tr className="border-b border-gray-200 dark:border-gray-700">
                             <td className="p-2 font-medium">
                               #{e.userId} · {e.username}
                             </td>
@@ -443,7 +443,7 @@ export default function ReportTab({
                             <td className="p-2">
                               <button
                                 type="button"
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50"
+                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                                 onClick={() => {
                                   setOpenEmployeeIds((prev) =>
                                     prev.includes(e.userId)
@@ -457,17 +457,17 @@ export default function ReportTab({
                             </td>
                           </tr>
                           {isOpen ? (
-                            <tr className="border-b bg-gray-50/50">
+                            <tr className="border-b border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-900/60">
                               <td className="p-2" colSpan={8}>
                                 {e.items.length === 0 ? (
-                                  <div className="text-xs text-gray-600">
+                                  <div className="text-xs text-gray-600 dark:text-gray-300">
                                     항목이 없습니다.
                                   </div>
                                 ) : (
                                   <div className="overflow-auto">
                                     <table className="w-full border-collapse text-xs">
                                       <thead>
-                                        <tr className="border-b bg-white text-left">
+                                        <tr className="border-b border-gray-200 bg-white text-left dark:border-gray-700 dark:bg-gray-800">
                                           <th className="p-2">일자</th>
                                           <th className="p-2">출근</th>
                                           <th className="p-2">퇴근</th>
@@ -478,7 +478,10 @@ export default function ReportTab({
                                       </thead>
                                       <tbody>
                                         {e.items.map((it) => (
-                                          <tr key={it.attendanceId} className="border-b">
+                                          <tr
+                                            key={it.attendanceId}
+                                            className="border-b border-gray-200 dark:border-gray-700"
+                                          >
                                             <td className="p-2 font-medium">
                                               {it.workDate}
                                             </td>
@@ -499,7 +502,7 @@ export default function ReportTab({
                                             <td className="p-2">
                                               <button
                                                 type="button"
-                                                className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50"
+                                                className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                                                 onClick={() =>
                                                   setSelectedAttendance({
                                                     attendanceId: it.attendanceId,
@@ -534,7 +537,7 @@ export default function ReportTab({
       )}
 
       {toast && (
-        <div className="mt-3 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+        <div className="mt-3 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-900/30 dark:text-green-200">
           ✅ {toast}
         </div>
       )}
