@@ -35,7 +35,7 @@
 | ADMIN만 정책/조직 변경 가능 | 서버 단에서 강제 |  |  |
 | 모바일 환경 사용 가능 | 모바일 브라우저에서도 출근/퇴근 핵심 플로우 완료 | [TODO] | 모바일 UX 고정 전제(Contract) 반영. capture/미리보기 등 UX 세부는 프론트 구현으로 검증 |
 | 즉시 상태 반영 | 출근/퇴근 성공 응답 기반으로 UI 상태 즉시 갱신 | [PASS] | success DTO 기반 setToday 적용(프론트) |
-| 사용자 식별 방식 | 요청 파라미터(userId) 의존 제거, 서버 컨텍스트 기반 식별 | [PASS] | 임시 인증 컨텍스트: `X-USER-ID` 헤더 + `@CurrentUserId` ArgumentResolver. (추후 JWT/세션으로 교체 예정) |
+| 사용자 식별 방식 | 요청 파라미터(userId) 의존 제거, 서버 컨텍스트 기반 식별 | [PASS] | (권장) `Authorization: Bearer <JWT>` / (개발·호환) `X-USER-ID` + `@CurrentUserId` ArgumentResolver |
 
 ---
 
@@ -129,9 +129,9 @@
 
 | Item | Check | Status | Notes |
 |-----|------|--------|------|
-| 권한 스코프 서버 강제 | client 파라미터 무시 |  |  |
-| MANAGER 조회 범위 제한 | 관리 Site만 |  |  |
-| ADMIN 전체 조회 가능 | 예외 없음 |  |  |
+| 권한 스코프 서버 강제 | client 파라미터 무시 |  | 요청 스코프(userId/siteId 등) 파라미터에 의존하지 않고 서버에서 강제 |
+| MANAGER 조회 범위 제한 | 관리 Site만 |  | 스코프 판단은 서버에서 강제(Assignments 등) |
+| ADMIN 전체 조회 가능 | 예외 없음 |  | ADMIN은 전체 조회/관리 가능(예외 없음) |
 
 ---
 

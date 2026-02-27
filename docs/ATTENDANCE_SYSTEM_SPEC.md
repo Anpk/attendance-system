@@ -58,6 +58,16 @@ Any deviation requires **explicit prior approval**.
 - `EMPLOYEE | MANAGER | ADMIN`
 - 정책 변경 및 조직 관리 권한은 **ADMIN만 가능**
 
+#### 사용자 식별(인증 컨텍스트, 고정)
+
+> 요청 파라미터/바디로 `userId`를 받지 않고, **인증 컨텍스트**에서 현재 사용자를 식별한다.
+>
+> - (권장) `Authorization: Bearer <JWT>`
+>   - 토큰 검증 성공 시 서버는 인증 컨텍스트에 `userId`를 주입한다.
+> - (개발/호환) JWT가 없는 환경에서는 (임시) `X-USER-ID: <number>` 헤더를 사용한다.
+>
+> 이 규칙은 Contract의 일부이며, API 문서 및 구현은 반드시 이를 따른다.
+
 ### UX (모바일 우선, 고정)
 
 - 본 시스템은 **모바일 환경(모바일 브라우저)에서도 사용 가능**해야 한다.

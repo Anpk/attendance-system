@@ -56,7 +56,7 @@
 
 | code | HTTP | error | Notes |
 |---|---:|---|---|
-| UNAUTHORIZED | 401 | UNAUTHORIZED | (현재: X-USER-ID + @CurrentUserId, 추후: JWT/세션) |
+| UNAUTHORIZED | 401 | UNAUTHORIZED | (권장: Authorization Bearer 누락/만료/불일치 시) / (개발·호환: X-USER-ID 누락/형식 오류 시) |
 | FORBIDDEN | 403 | FORBIDDEN | (권한/스코프 위반 시 사용) |
 
 ---
