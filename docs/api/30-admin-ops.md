@@ -36,7 +36,8 @@
 
 ### 인증 컨텍스트(고정)
 - 사용자 식별은 요청 파라미터/바디가 아니라 **인증 컨텍스트**에서 결정한다.
-  - 현행(임시): `X-USER-ID` 헤더 + `@CurrentUserId`
+  - (권장) `Authorization: Bearer <JWT>`
+  - (개발/호환) JWT가 없는 환경에서는 (임시) `X-USER-ID` 헤더 + `@CurrentUserId`
 
 ---
 

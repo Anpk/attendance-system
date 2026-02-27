@@ -1,4 +1,3 @@
-```md
 # Attendance Frontend (Next.js)
 
 이 디렉토리는 **근태관리 웹앱 프로젝트의 프론트엔드(Next.js)** 입니다.  
@@ -16,6 +15,13 @@
 
 - `docs/api/*`  
   - 구현 가이드(요청/응답/에러 포맷)
+
+---
+
+## Authentication (Implementation Note)
+
+- (권장) `Authorization: Bearer <JWT>`
+- (개발/호환) JWT가 없는 환경에서는 `X-USER-ID` 헤더를 사용할 수 있습니다.
 
 ---
 
@@ -72,5 +78,4 @@ export CORS_ALLOWED_ORIGINS=http://localhost:3000
 
 ---
 
-> 이 문서 구조는  
-> “설계 고정 → 구현 → 점검 → 확장” 흐름을 안전하게 유지하기 위한 것이다.
+> 이 문서 구조는 “설계 고정 → 구현 → 점검 → 확장” 흐름을 안전하게 유지하기 위한 것이다.

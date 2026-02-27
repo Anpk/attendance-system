@@ -25,6 +25,10 @@
 - Attendance 도메인 API 경로는 단수형을 사용한다.
   - `/api/attendance/...`
 
+### Authentication Context (Implementation Note)
+- (권장) `Authorization: Bearer <JWT>`
+- (개발/호환) JWT가 없는 환경에서는 (임시) `X-USER-ID` 헤더
+
 ---
 
 ## 📂 API 문서 목록
