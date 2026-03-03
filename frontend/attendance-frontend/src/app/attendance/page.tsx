@@ -56,6 +56,7 @@ function AttendancePageInner() {
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const checkOutFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // 중복 클릭/연타로 동일 요청이 2번 전송되는 것을 방지하기 위한 동기 가드
   const inflightRef = useRef(false);
@@ -226,7 +227,8 @@ function AttendancePageInner() {
     await checkInWithPhoto(file);
   }
 
-  async function checkOutWithRequestParam(url: string) {
+  // ✅ 옵션 A: 퇴근도 사진 업로드(멀티파트)
+  async function checkOutWithPhoto(photo: File) {
     if (!user || loading || inflightRef.current) return;
     inflightRef.current = true;
     inflightActionRef.current = 'checkout';
@@ -235,12 +237,18 @@ function AttendancePageInner() {
     setMessage('');
 
     try {
-      const result = await apiFetch<AttendanceActionResponse>(url, {
-        method: 'POST',
-      });
+      const form = new FormData();
+      form.append('photo', photo);
+
+      const result = await apiFetch<AttendanceActionResponse>(
+        `${baseUrl}/api/attendance/check-out`,
+        {
+          method: 'POST',
+          body: form,
+        }
+      );
 
       setToday(result);
-
       setFlashMessage('✅ 처리되었습니다.');
     } catch (e) {
       setFlashMessage(`❌ ${toActionUserMessage(e)}`);
@@ -248,11 +256,39 @@ function AttendancePageInner() {
       inflightActionRef.current = null;
       inflightRef.current = false;
       setLoading(false);
+      if (checkOutFileInputRef.current)
+        checkOutFileInputRef.current.value = '';
     }
   }
 
-  const handleCheckOut = () =>
-    checkOutWithRequestParam(`${baseUrl}/api/attendance/check-out`);
+  function handleCheckOutClick() {
+    if (!user || loading || inflightRef.current || !isCheckedIn || isCheckedOut)
+      return;
+    checkOutFileInputRef.current?.click();
+  }
+
+  async function handleCheckOutPhotoSelected(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setFlashMessage('❌ 이미지 파일만 업로드할 수 있습니다.');
+      if (checkOutFileInputRef.current)
+        checkOutFileInputRef.current.value = '';
+      return;
+    }
+
+    if (file.size > MAX_PHOTO_BYTES) {
+      setFlashMessage('❌ 이미지 파일만 업로드할 수 있습니다. (최대 5MB)');
+      if (checkOutFileInputRef.current)
+        checkOutFileInputRef.current.value = '';
+      return;
+    }
+
+    await checkOutWithPhoto(file);
+  }
 
   if (ready && user && (user.role === 'ADMIN' || user.role === 'MANAGER')) {
     return <div className="min-h-screen bg-gray-50" />;
@@ -278,7 +314,7 @@ function AttendancePageInner() {
 
         <p className="text-gray-600">로그인 사용자 ID: {user?.userId}</p>
 
-        {/* 숨김 파일 입력: 출근 버튼이 클릭 트리거 */}
+        {/* 출근 파일 입력 */}
         <input
           ref={fileInputRef}
           type="file"
@@ -286,6 +322,16 @@ function AttendancePageInner() {
           capture="environment"
           className="hidden"
           onChange={handlePhotoSelected}
+        />
+
+        {/* 퇴근 파일 입력(옵션 A) */}
+        <input
+          ref={checkOutFileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleCheckOutPhotoSelected}
         />
 
         <div className="flex gap-4">
@@ -304,7 +350,7 @@ function AttendancePageInner() {
             disabled={loading || !isCheckedIn || isCheckedOut}
             aria-busy={loading}
             className="rounded bg-green-600 px-6 py-3 text-white disabled:opacity-50"
-            onClick={handleCheckOut}
+            onClick={handleCheckOutClick}
           >
             {loading && inflightActionRef.current === 'checkout'
               ? '처리 중...'
