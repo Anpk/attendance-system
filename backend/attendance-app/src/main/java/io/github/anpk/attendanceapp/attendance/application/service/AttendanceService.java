@@ -75,13 +75,13 @@ public class AttendanceService {
             throw new BusinessException(ErrorCode.ALREADY_CHECKED_IN, "이미 출근 처리되었습니다.");
         }
 
-        String photoPath = savePhoto(photo);
+        String checkInPhotoPath = savePhoto(photo);
 
         Attendance attendance = Attendance.checkIn(
                 userId,
                 today,
                 LocalDateTime.now(KST),
-                photoPath
+                checkInPhotoPath
         );
 
         var saved = attendanceRepository.save(attendance);
@@ -89,7 +89,7 @@ public class AttendanceService {
     }
 
     @Transactional
-    public AttendanceActionResponse checkOut(Long userId) {
+    public AttendanceActionResponse checkOut(Long userId, MultipartFile photo) throws IOException {
         LocalDate today = LocalDate.now(KST);
 
         var attendance = attendanceRepository.findByUserIdAndWorkDate(userId, today)
@@ -99,10 +99,19 @@ public class AttendanceService {
             throw new BusinessException(ErrorCode.ALREADY_CHECKED_OUT, "이미 퇴근 처리되었습니다.");
         }
 
-        attendance.checkOut(LocalDateTime.now(KST));
+        validateCheckOutPhoto(photo);
+        String checkOutPhotoPath = savePhoto(photo);
+        attendance.checkOut(LocalDateTime.now(KST), checkOutPhotoPath);
 
         var saved = attendanceRepository.save(attendance);
         return AttendanceActionResponse.from(saved);
+    }
+
+    private static void validateCheckOutPhoto(MultipartFile photo) {
+        if (photo == null || photo.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "퇴근 사진은 필수입니다.");
+        }
+        validateCheckInPhoto(photo);
     }
 
     private static void validateCheckInPhoto(MultipartFile photo) {

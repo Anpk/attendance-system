@@ -37,9 +37,13 @@ public class AttendanceController {
         return ResponseEntity.status(HttpStatus.CREATED).body(res);
     }
 
-    @PostMapping("/check-out")
-    public ResponseEntity<AttendanceActionResponse> checkOut(@CurrentUserId Long userId) {
-        return ResponseEntity.ok(attendanceService.checkOut(userId));
+    // 옵션 A: 퇴근도 사진 업로드(멀티파트)로 처리
+    @PostMapping(value = "/check-out", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<AttendanceActionResponse> checkOut(
+            @CurrentUserId Long userId,
+            @RequestParam MultipartFile photo
+    ) throws IOException {
+        return ResponseEntity.ok(attendanceService.checkOut(userId, photo));
     }
 
     /**
