@@ -23,8 +23,18 @@ public class Attendance {
 
     private LocalDateTime checkOutTime; // ✅ 퇴근 시간
 
+    // check-in photo (new)
+    @Column(name = "check_in_photo_path")
+    private String checkInPhotoPath;
+
+    // check-out photo (new)
+    @Column(name = "check_out_photo_path")
+    private String checkOutPhotoPath;
+
+    // legacy (backward compatibility)
+    @Deprecated
     @Column(name = "photo_path")
-    private String photoPath;
+    private String legacyPhotoPath;
 
 
 
@@ -41,7 +51,9 @@ public class Attendance {
         a.setUserId(userId);
         a.setWorkDate(workDate);
         a.setCheckInTime(checkInTime);
-        a.setPhotoPath(photoPath);
+        a.setCheckInPhotoPath(photoPath);
+        // legacy도 함께 세팅
+        a.setLegacyPhotoPath(photoPath);
         return a;
     }
 
@@ -49,6 +61,11 @@ public class Attendance {
 
     public void checkOut(LocalDateTime time) {
         this.checkOutTime = time;
+    }
+
+    public void checkOut(LocalDateTime time, String checkOutPhotoPath) {
+        this.checkOutTime = time;
+        this.checkOutPhotoPath = checkOutPhotoPath;
     }
 
     // ===== setter =====
@@ -65,8 +82,17 @@ public class Attendance {
         this.checkInTime = checkInTime;
     }
 
-    public void setPhotoPath(String photoPath) {
-        this.photoPath = photoPath;
+    public void setCheckInPhotoPath(String checkInPhotoPath) {
+        this.checkInPhotoPath = checkInPhotoPath;
+    }
+
+    public void setCheckOutPhotoPath(String checkOutPhotoPath) {
+        this.checkOutPhotoPath = checkOutPhotoPath;
+    }
+
+    @Deprecated
+    public void setLegacyPhotoPath(String legacyPhotoPath) {
+        this.legacyPhotoPath = legacyPhotoPath;
     }
 
     // ===== getter =====
@@ -76,5 +102,7 @@ public class Attendance {
     public LocalDate getWorkDate() { return workDate; }
     public LocalDateTime getCheckInTime() { return checkInTime; }
     public LocalDateTime getCheckOutTime() { return checkOutTime; }
-    public String getPhotoPath() { return photoPath; }
+    public String getCheckInPhotoPath() { return (checkInPhotoPath != null) ? checkInPhotoPath : legacyPhotoPath; }
+    public String getCheckOutPhotoPath() { return checkOutPhotoPath; }
+    @Deprecated public String getLegacyPhotoPath() { return legacyPhotoPath; }
 }
