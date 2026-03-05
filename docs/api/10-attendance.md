@@ -179,8 +179,19 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 
 > Check-out은 userId를 전달하지 않는다. (인증 컨텍스트에서 사용자 식별)
 
+- (권장) `Authorization: Bearer <JWT>`
+- (개발/호환) JWT가 없는 환경에서는 (임시) `X-USER-ID: <number>`
+
+#### Content-Type
+`multipart/form-data`
+
+#### Form Fields
+- `photo` (file, required): 이미지 파일 (최대 5MB)
+
 #### Example
-`POST /api/attendance/check-out + Header: X-USER-ID: 1`
+- `POST /api/attendance/check-out`
+  - Header: `Authorization: Bearer <JWT>`
+  - Form: `photo=@checkout.jpg`
 
 ---
 
@@ -188,6 +199,7 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 
 - 체크인 없는 경우 거부
 - 이미 체크아웃된 경우 거부
+- photo는 필수 (image/*, 최대 5MB)
 - `checkOutAt = now(Asia/Seoul)`
 
 ---
@@ -212,6 +224,7 @@ curl -X POST "http://localhost:8080/api/attendance/check-in" \
 
 | HTTP | Code                | Description      |
 |------|---------------------|------------------|
+| 422  | INVALID_REQUEST_PAYLOAD | 퇴근 사진 누락/형식 오류 |
 | 409  | NOT_CHECKED_IN      | 출근 기록 없음   |
 | 409  | ALREADY_CHECKED_OUT | 이미 퇴근 처리됨 |
 | 403  | EMPLOYEE_INACTIVE   | 비활성 직원      |
