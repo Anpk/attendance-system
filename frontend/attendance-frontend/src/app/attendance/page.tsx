@@ -26,6 +26,7 @@ function AttendancePageInner() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewAction, setPreviewAction] = useState<'checkin' | 'checkout' | null>(null);
+  const [previewError, setPreviewError] = useState<string>('');
 
   // 메시지 자동 해제(모바일 UX): 너무 오래 남지 않도록 TTL 적용
   const MESSAGE_TTL_MS = 4000;
@@ -72,19 +73,30 @@ function AttendancePageInner() {
   const isCheckedIn = today.checkInAt !== null;
   const isCheckedOut = today.checkOutAt !== null;
 
+  const isPreviewSubmitting =
+    previewOpen &&
+    previewAction !== null &&
+    loading &&
+    inflightActionRef.current === previewAction;
+
   function openPreview(action: 'checkin' | 'checkout', file: File) {
     setPreviewAction(action);
     setPreviewFile(file);
     setPreviewOpen(true);
+    setPreviewError('');
   }
 
   function closePreview() {
     setPreviewOpen(false);
     setPreviewFile(null);
     setPreviewAction(null);
+    setPreviewError('');
   }
 
   function retakeFromPreview() {
+    // 재선택/재촬영 시 기존 선택/에러를 정리하고 다시 선택하도록 유도
+    setPreviewError('');
+    setPreviewFile(null);
     if (previewAction === 'checkin') fileInputRef.current?.click();
     if (previewAction === 'checkout') checkOutFileInputRef.current?.click();
   }
@@ -159,12 +171,13 @@ function AttendancePageInner() {
     open: boolean;
     title: string;
     file: File | null;
+    error: string;
     submitting: boolean;
     onRetake: () => void;
     onCancel: () => void;
     onConfirm: () => void;
   }) {
-    const { open, title, file, submitting, onRetake, onCancel, onConfirm } =
+    const { open, title, file, error, submitting, onRetake, onCancel, onConfirm } =
       props;
 
     const previewUrl = useMemo(() => {
@@ -202,6 +215,10 @@ function AttendancePageInner() {
         role="dialog"
         aria-modal="true"
         aria-busy={submitting}
+        onMouseDown={(ev) => {
+          if (submitting) return;
+          if (ev.target === ev.currentTarget) onCancel();
+        }}
       >
         <div className="w-full max-w-md rounded-lg bg-white p-4 shadow text-gray-900 dark:bg-gray-800 dark:text-gray-100">
           <div className="flex items-start justify-between gap-3">
@@ -242,6 +259,12 @@ function AttendancePageInner() {
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-300">
               업로드 전에 사진을 확인하고, 필요하면 재선택/재촬영할 수 있습니다.
             </p>
+
+            {error && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                ❌ {error}
+              </p>
+            )}
           </div>
 
           <div className="mt-4 flex gap-2">
@@ -277,6 +300,20 @@ function AttendancePageInner() {
       </div>
     );
   }
+
+  // 미리보기 모달: ESC로 닫기(업로드 중에는 닫기 금지)
+  useEffect(() => {
+    if (!previewOpen) return;
+
+    function onKeyDown(ev: KeyboardEvent) {
+      if (ev.key !== 'Escape') return;
+      if (isPreviewSubmitting) return;
+      closePreview();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [previewOpen, isPreviewSubmitting]);
 
   // ADMIN/MANAGER는 진입 차단
   useEffect(() => {
@@ -367,6 +404,7 @@ function AttendancePageInner() {
       return;
     }
 
+    setPreviewError('');
     openPreview('checkin', file);
   }
 
@@ -430,19 +468,26 @@ function AttendancePageInner() {
       return;
     }
 
+    setPreviewError('');
     openPreview('checkout', file);
   }
 
   async function confirmPreviewUpload() {
     if (!previewFile || !previewAction) return;
+    // 재시도 시 기존 에러 제거
+    setPreviewError('');
+
     try {
       if (previewAction === 'checkin') {
         await checkInWithPhoto(previewFile);
       } else {
         await checkOutWithPhoto(previewFile);
       }
-    } finally {
+      // 성공 시에만 닫기
       closePreview();
+    } catch (e) {
+      // 실패 시 모달 유지 + 에러 표시(재시도 가능)
+      setPreviewError(toActionUserMessage(e));
     }
   }
 
@@ -518,7 +563,8 @@ function AttendancePageInner() {
           open={previewOpen}
           title={previewAction === 'checkout' ? '퇴근 사진 확인' : '출근 사진 확인'}
           file={previewFile}
-          submitting={loading && inflightActionRef.current === previewAction}
+          error={previewError}
+          submitting={isPreviewSubmitting}
           onRetake={retakeFromPreview}
           onCancel={closePreview}
           onConfirm={confirmPreviewUpload}
