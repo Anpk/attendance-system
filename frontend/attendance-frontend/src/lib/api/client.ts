@@ -58,8 +58,19 @@ export async function apiFetch<T>(
     }
   }
 
-  const isFormData =
-    typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const isFormData = (() => {
+    const b = options.body as unknown;
+
+    // Cross-realm safe FormData detection
+    if (typeof FormData !== 'undefined' && b instanceof FormData) return true;
+    if (!b || typeof b !== 'object') return false;
+
+    try {
+      return Object.prototype.toString.call(b) === '[object FormData]';
+    } catch {
+      return false;
+    }
+  })();
   let body: BodyInit | undefined;
 
   if (options.body !== undefined) {
