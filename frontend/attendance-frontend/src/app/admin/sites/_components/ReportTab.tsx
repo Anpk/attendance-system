@@ -1,6 +1,13 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import CorrectionRequestModal from '@/app/_components/CorrectionRequestModal';
 import { toUserMessage } from '@/lib/api/error-messages';
 import { adminFetchAttendanceReport } from '@/lib/api/admin';
@@ -89,7 +96,19 @@ export default function ReportTab({
   const [reportLoading, setReportLoading] = useState(false);
   const [reportData, setReportData] =
     useState<AdminAttendanceReportResponse | null>(null);
-  const [openEmployeeIds, setOpenEmployeeIds] = useState<number[]>([]);
+  const [activeOnly, setActiveOnly] = useState(true);
+  const [autoLoad, setAutoLoad] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<{
+    userId: number;
+    username: string;
+    items: AdminAttendanceReportEmployeeResponse['items'];
+  } | null>(null);
+  function isReportTargetEmployee(
+    e: AdminAttendanceReportEmployeeResponse
+  ): boolean {
+    // 집계/표/CSV 대상은 EMPLOYEE만
+    return e.role === 'EMPLOYEE';
+  }
   const [selectedAttendance, setSelectedAttendance] = useState<{
     attendanceId: number;
     workDate: string;
@@ -97,6 +116,12 @@ export default function ReportTab({
     checkOutAt: string | null;
   } | null>(null);
   const [toast, setToast] = useState<string>('');
+  const reportSeqRef = useRef(0);
+  const lastLoadedRef = useRef<{
+    siteId: string;
+    from: string;
+    to: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -109,32 +134,105 @@ export default function ReportTab({
     return reportFrom > reportTo;
   }, [reportFrom, reportTo]);
 
+  const quickPreset = useMemo(() => {
+    if (!reportFrom || !reportTo)
+      return null as
+        | 'today'
+        | 'week'
+        | 'thisMonth'
+        | 'prevMonth'
+        | 'nextMonth'
+        | null;
+
+    const now = new Date();
+    const today = toYmdLocal(now);
+    if (reportFrom === today && reportTo === today) return 'today';
+
+    const day = now.getDay();
+    const diffToMon = (day + 6) % 7;
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - diffToMon);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    if (reportFrom === toYmdLocal(mon) && reportTo === toYmdLocal(sun))
+      return 'week';
+
+    const firstThis = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastThis = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    if (
+      reportFrom === toYmdLocal(firstThis) &&
+      reportTo === toYmdLocal(lastThis)
+    )
+      return 'thisMonth';
+
+    // prev/next 기준은 현재 선택된 reportFrom
+    const base = new Date(reportFrom + 'T00:00:00');
+    const firstBase = new Date(base.getFullYear(), base.getMonth(), 1);
+
+    const lastPrev = new Date(firstBase);
+    lastPrev.setDate(0);
+    const firstPrev = new Date(lastPrev.getFullYear(), lastPrev.getMonth(), 1);
+    if (
+      reportFrom === toYmdLocal(firstPrev) &&
+      reportTo === toYmdLocal(lastPrev)
+    )
+      return 'prevMonth';
+
+    const firstNext = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+    const lastNext = new Date(base.getFullYear(), base.getMonth() + 2, 0);
+    if (
+      reportFrom === toYmdLocal(firstNext) &&
+      reportTo === toYmdLocal(lastNext)
+    )
+      return 'nextMonth';
+
+    return null;
+  }, [reportFrom, reportTo]);
+
+  const isDirty = useMemo(() => {
+    if (autoLoad) return false;
+    const last = lastLoadedRef.current;
+    if (!last) return false;
+    return (
+      last.siteId !== reportSiteId ||
+      last.from !== reportFrom ||
+      last.to !== reportTo
+    );
+  }, [autoLoad, reportSiteId, reportFrom, reportTo]);
+
   const userOptions = useMemo(() => {
     if (!reportData) return [];
     return reportData.employees
+      .filter(isReportTargetEmployee)
+      .filter((e) => (activeOnly ? e.active : true))
       .map((e) => ({
         userId: e.userId,
         label: `#${e.userId} · ${e.username}`,
       }))
       .sort((a, b) => a.userId - b.userId);
-  }, [reportData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportData, activeOnly]);
 
   const filteredEmployees = useMemo(() => {
     if (!reportData) return [];
+
+    let list = reportData.employees.filter(isReportTargetEmployee);
+    if (activeOnly) list = list.filter((e) => e.active);
+
     const uid = Number(reportUserId);
-    if (!reportUserId || !Number.isFinite(uid)) return reportData.employees;
-    return reportData.employees.filter((e) => e.userId === uid);
-  }, [reportData, reportUserId]);
+    if (!reportUserId || !Number.isFinite(uid)) return list;
+    return list.filter((e) => e.userId === uid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportData, reportUserId, activeOnly]);
 
   useEffect(() => {
     if (!reportUserId) return;
-    if (!reportData) return;
     const uid = Number(reportUserId);
     if (!Number.isFinite(uid)) return;
-    if (!reportData.employees.some((e) => e.userId === uid)) {
+    if (!userOptions.some((u) => u.userId === uid)) {
       setReportUserId('');
     }
-  }, [reportUserId, reportData]);
+  }, [reportUserId, userOptions]);
 
   useEffect(() => {
     if (!ready) return;
@@ -145,40 +243,84 @@ export default function ReportTab({
     setReportSiteId(String(sites[0].siteId));
   }, [ready, user, forbidden, sites, reportSiteId]);
 
-  async function submitFetchReport() {
+  async function submitFetchReport(override?: { from: string; to: string }) {
     if (!user) return;
 
     const sid = Number(reportSiteId);
     if (!Number.isFinite(sid)) {
-      setFlashMessage('site를 선택해 주세요.');
+      setFlashMessage('근무지를 선택해 주세요.');
       return;
     }
-    if (!reportFrom || !reportTo) {
-      setFlashMessage('from/to를 입력해 주세요.');
+    const effectiveFrom = override?.from ?? reportFrom;
+    const effectiveTo = override?.to ?? reportTo;
+    if (!effectiveFrom || !effectiveTo) {
+      setFlashMessage('시작일/종료일을 입력해 주세요.');
       return;
     }
-    if (reportFrom > reportTo) {
-      setFlashMessage('from은 to보다 이후일 수 없습니다.');
+    if (effectiveFrom > effectiveTo) {
+      setFlashMessage('시작일은 종료일보다 이후일 수 없습니다.');
       return;
     }
 
+    const mySeq = ++reportSeqRef.current;
     setReportLoading(true);
     try {
       const res = await adminFetchAttendanceReport({
         siteId: sid,
-        from: reportFrom,
-        to: reportTo,
+        from: effectiveFrom,
+        to: effectiveTo,
       });
+      if (mySeq !== reportSeqRef.current) return;
       setReportData(res);
-      setOpenEmployeeIds([]);
+      lastLoadedRef.current = {
+        siteId: String(sid),
+        from: effectiveFrom,
+        to: effectiveTo,
+      };
       setReportUserId('');
     } catch (e) {
+      if (mySeq !== reportSeqRef.current) return;
       setReportData(null);
       setFlashMessage(toUserMessage(e));
     } finally {
-      setReportLoading(false);
+      if (mySeq === reportSeqRef.current) setReportLoading(false);
     }
   }
+  // 자동 조회: 근무지/기간 변경 시 디바운스 후 조회(직원 선택은 로컬 필터)
+  useEffect(() => {
+    if (!autoLoad) return;
+    if (!ready) return;
+    if (!user) return;
+    if (forbidden) return;
+    if (!reportSiteId) return;
+    if (!reportFrom || !reportTo) return;
+    if (reportFrom > reportTo) return;
+
+    const t = setTimeout(() => {
+      void submitFetchReport();
+    }, 350);
+
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoad, reportSiteId, reportFrom, reportTo, ready, user, forbidden]);
+  const setRange = useCallback((nf: string, nt: string) => {
+    setReportFrom(nf);
+    setReportTo(nt);
+    setReportData(null);
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setReportFrom(reportDefaults.from);
+    setReportTo(reportDefaults.to);
+    setReportUserId('');
+    setActiveOnly(true);
+    setReportData(null);
+    // 초기화도 즉시 조회
+    void submitFetchReport({
+      from: reportDefaults.from,
+      to: reportDefaults.to,
+    });
+  }, [reportDefaults]);
 
   useEffect(() => {
     if (!ready) return;
@@ -255,32 +397,193 @@ export default function ReportTab({
   }
 
   return (
-    <section className="rounded border bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+    <section className="rounded border border-gray-300 bg-white p-4 text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Site 근태 리포트</h2>
-        <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold">근무지 근태 리포트</h2>
+        {reportLoading && (
+          <span className="ml-2 rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 dark:border-gray-600 dark:bg-gray-950 dark:text-gray-200">
+            조회 중…
+          </span>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {isDirty && (
+            <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-100">
+              변경됨 · 조회 필요
+            </span>
+          )}
+          <label className="flex items-center gap-2 text-xs text-gray-800 dark:text-gray-200">
+            <input
+              type="checkbox"
+              checked={autoLoad}
+              onChange={(e) => setAutoLoad(e.target.checked)}
+              disabled={reportLoading}
+            />
+            자동 조회
+          </label>
+
+          <button
+            type="button"
+            onClick={resetFilters}
+            disabled={reportLoading}
+            className="rounded border border-gray-400 px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
+          >
+            초기화
+          </button>
+
           <button
             type="button"
             onClick={() => void submitFetchReport()}
             disabled={reportLoading || reportInvalidRange}
-            className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+            className="rounded border border-gray-400 px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
           >
             {reportLoading ? '조회 중…' : '조회'}
           </button>
+
           <button
             type="button"
             onClick={downloadCsv}
             disabled={!reportData || reportLoading}
-            className="rounded border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+            className="rounded border border-gray-400 px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
           >
-            CSV
+            CSV 다운로드
           </button>
         </div>
       </div>
 
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="text-xs font-medium text-gray-800 dark:text-gray-200">
+          빠른 선택
+        </div>
+
+        <button
+          type="button"
+          className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+            quickPreset === 'today'
+              ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+              : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+          }`}
+          disabled={reportLoading}
+          onClick={() => {
+            const now = new Date();
+            const nf = toYmdLocal(now);
+            const nt = toYmdLocal(now);
+            setRange(nf, nt);
+            void submitFetchReport({ from: nf, to: nt });
+          }}
+        >
+          오늘
+        </button>
+
+        <button
+          type="button"
+          className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+            quickPreset === 'week'
+              ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+              : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+          }`}
+          disabled={reportLoading}
+          onClick={() => {
+            const now = new Date();
+            const day = now.getDay();
+            const diffToMon = (day + 6) % 7;
+            const mon = new Date(now);
+            mon.setDate(now.getDate() - diffToMon);
+            const sun = new Date(mon);
+            sun.setDate(mon.getDate() + 6);
+            const nf = toYmdLocal(mon);
+            const nt = toYmdLocal(sun);
+            setRange(nf, nt);
+            void submitFetchReport({ from: nf, to: nt });
+          }}
+        >
+          이번주
+        </button>
+
+        <button
+          type="button"
+          className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+            quickPreset === 'thisMonth'
+              ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+              : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+          }`}
+          disabled={reportLoading}
+          onClick={() => {
+            const now = new Date();
+            const first = new Date(now.getFullYear(), now.getMonth(), 1);
+            const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            const nf = toYmdLocal(first);
+            const nt = toYmdLocal(last);
+            setRange(nf, nt);
+            void submitFetchReport({ from: nf, to: nt });
+          }}
+        >
+          이번달
+        </button>
+
+        <button
+          type="button"
+          className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+            quickPreset === 'prevMonth'
+              ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+              : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+          }`}
+          disabled={reportLoading}
+          onClick={() => {
+            const base = reportFrom
+              ? new Date(reportFrom + 'T00:00:00')
+              : new Date();
+            const firstThis = new Date(base.getFullYear(), base.getMonth(), 1);
+            const lastPrev = new Date(firstThis);
+            lastPrev.setDate(0);
+            const firstPrev = new Date(
+              lastPrev.getFullYear(),
+              lastPrev.getMonth(),
+              1
+            );
+            const nf = toYmdLocal(firstPrev);
+            const nt = toYmdLocal(lastPrev);
+            setRange(nf, nt);
+            void submitFetchReport({ from: nf, to: nt });
+          }}
+        >
+          지난달
+        </button>
+
+        <button
+          type="button"
+          className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+            quickPreset === 'nextMonth'
+              ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+              : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+          }`}
+          disabled={reportLoading}
+          onClick={() => {
+            const base = reportFrom
+              ? new Date(reportFrom + 'T00:00:00')
+              : new Date();
+            const firstNext = new Date(
+              base.getFullYear(),
+              base.getMonth() + 1,
+              1
+            );
+            const lastNext = new Date(
+              base.getFullYear(),
+              base.getMonth() + 2,
+              0
+            );
+            const nf = toYmdLocal(firstNext);
+            const nt = toYmdLocal(lastNext);
+            setRange(nf, nt);
+            void submitFetchReport({ from: nf, to: nt });
+          }}
+        >
+          다음달
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
-        <label className="text-xs text-gray-700 dark:text-gray-200">
-          from
+        <label className="text-xs text-gray-800 dark:text-gray-200">
+          <span className="block mb-1">시작일</span>
           <input
             type="date"
             value={reportFrom}
@@ -288,13 +591,13 @@ export default function ReportTab({
               setReportFrom(e.target.value);
               setReportData(null);
             }}
-            className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            className="mt-0 w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100 md:w-1/2"
             disabled={reportLoading}
           />
         </label>
 
-        <label className="text-xs text-gray-700 dark:text-gray-200">
-          to
+        <label className="text-xs text-gray-800 dark:text-gray-200">
+          <span className="block mb-1">종료일</span>
           <input
             type="date"
             value={reportTo}
@@ -302,24 +605,23 @@ export default function ReportTab({
               setReportTo(e.target.value);
               setReportData(null);
             }}
-            className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            className="mt-0 w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100 md:w-1/2"
             disabled={reportLoading}
           />
         </label>
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end">
-        <label className="text-xs text-gray-700 dark:text-gray-200">
-          site
+        <label className="text-xs text-gray-800 dark:text-gray-200">
+          <span className="block mb-1">근무지</span>
           <select
             value={reportSiteId}
             onChange={(e) => {
               setReportSiteId(e.target.value);
               setReportUserId('');
               setReportData(null);
-              setOpenEmployeeIds([]);
             }}
-            className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            className="mt-0 w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100 md:w-1/2"
             disabled={reportLoading}
           >
             <option value="">선택…</option>
@@ -332,12 +634,23 @@ export default function ReportTab({
           </select>
         </label>
 
-        <label className="text-xs text-gray-700 dark:text-gray-200">
-          user
+        <label className="text-xs text-gray-800 dark:text-gray-200">
+          <div className="flex items-end justify-between gap-2">
+            <span className="block mb-1">직원</span>
+            <label className="flex items-center gap-2 text-[11px] text-gray-800 dark:text-gray-200">
+              <input
+                type="checkbox"
+                checked={activeOnly}
+                onChange={(e) => setActiveOnly(e.target.checked)}
+                disabled={reportLoading}
+              />
+              활성 사용자만
+            </label>
+          </div>
           <select
             value={reportUserId}
             onChange={(e) => setReportUserId(e.target.value)}
-            className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            className="mt-0 w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100 md:w-1/2"
             disabled={reportLoading || !reportData}
           >
             <option value="">전체</option>
@@ -352,23 +665,29 @@ export default function ReportTab({
 
       {reportInvalidRange && (
         <div className="mt-2 text-[11px] text-red-600">
-          * from은 to보다 이후일 수 없습니다.
+          * 시작일은 종료일보다 이후일 수 없습니다.
         </div>
       )}
 
       {!reportData ? (
-        <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">조회 결과가 없습니다.</div>
+        <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">
+          근무지/기간을 선택한 뒤 조회해 주세요.
+        </div>
       ) : (
         <>
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
-              <div className="text-[11px] text-gray-600 dark:text-gray-300">기간</div>
+            <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
+              <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                기간
+              </div>
               <div className="text-sm font-semibold">
                 {reportData.from} ~ {reportData.to}
               </div>
             </div>
-            <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
-              <div className="text-[11px] text-gray-600 dark:text-gray-300">직원 수</div>
+            <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
+              <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                직원 수
+              </div>
               <div className="text-sm font-semibold">
                 {filteredEmployees.length}명
               </div>
@@ -382,8 +701,10 @@ export default function ReportTab({
                 </div>
               )}
             </div>
-            <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
-              <div className="text-[11px] text-gray-600 dark:text-gray-300">총 근무시간</div>
+            <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
+              <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                총 근무시간
+              </div>
               <div className="text-sm font-semibold">
                 {formatMinutes(
                   filteredEmployees.reduce(
@@ -393,8 +714,10 @@ export default function ReportTab({
                 )}
               </div>
             </div>
-            <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
-              <div className="text-[11px] text-gray-600 dark:text-gray-300">퇴근 누락</div>
+            <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
+              <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                퇴근 누락
+              </div>
               <div className="text-sm font-semibold">
                 {filteredEmployees.reduce(
                   (acc, e) => acc + (e.missingCheckoutCount ?? 0),
@@ -406,15 +729,15 @@ export default function ReportTab({
           </div>
 
           {filteredEmployees.length === 0 ? (
-            <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">직원이 없습니다.</div>
+            <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">
+              선택한 조건에 해당하는 직원이 없습니다.
+            </div>
           ) : (
             <div className="mt-4 overflow-auto">
               <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-left dark:border-gray-700 dark:bg-gray-900">
+                  <tr className="sticky top-0 z-10 border-b border-gray-300 bg-gray-100 text-left dark:border-gray-600 dark:bg-gray-950">
                     <th className="p-2">직원</th>
-                    <th className="p-2">role</th>
-                    <th className="p-2">active</th>
                     <th className="p-2">근무일</th>
                     <th className="p-2">총 근무</th>
                     <th className="p-2">누락</th>
@@ -424,113 +747,55 @@ export default function ReportTab({
                 </thead>
                 <tbody>
                   {filteredEmployees.map(
-                    (e: AdminAttendanceReportEmployeeResponse) => {
-                      const isOpen = openEmployeeIds.includes(e.userId);
-                      return (
-                        <Fragment key={e.userId}>
-                          <tr className="border-b border-gray-200 dark:border-gray-700">
-                            <td className="p-2 font-medium">
-                              #{e.userId} · {e.username}
-                            </td>
-                            <td className="p-2">{e.role}</td>
-                            <td className="p-2">{e.active ? 'Y' : 'N'}</td>
-                            <td className="p-2">{e.totalDays}일</td>
-                            <td className="p-2">
-                              {formatMinutes(e.totalWorkMinutes)}
-                            </td>
-                            <td className="p-2">{e.missingCheckoutCount}</td>
-                            <td className="p-2">{e.correctedCount}</td>
-                            <td className="p-2">
-                              <button
-                                type="button"
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-                                onClick={() => {
-                                  setOpenEmployeeIds((prev) =>
-                                    prev.includes(e.userId)
-                                      ? prev.filter((x) => x !== e.userId)
-                                      : [...prev, e.userId]
-                                  );
-                                }}
-                              >
-                                {isOpen ? '접기' : '상세'}
-                              </button>
-                            </td>
-                          </tr>
-                          {isOpen ? (
-                            <tr className="border-b border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-900/60">
-                              <td className="p-2" colSpan={8}>
-                                {e.items.length === 0 ? (
-                                  <div className="text-xs text-gray-600 dark:text-gray-300">
-                                    항목이 없습니다.
-                                  </div>
-                                ) : (
-                                  <div className="overflow-auto">
-                                    <table className="w-full border-collapse text-xs">
-                                      <thead>
-                                        <tr className="border-b border-gray-200 bg-white text-left dark:border-gray-700 dark:bg-gray-800">
-                                          <th className="p-2">일자</th>
-                                          <th className="p-2">출근</th>
-                                          <th className="p-2">퇴근</th>
-                                          <th className="p-2">근무</th>
-                                          <th className="p-2">정정</th>
-                                          <th className="p-2">정정 요청</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {e.items.map((it) => (
-                                          <tr
-                                            key={it.attendanceId}
-                                            className="border-b border-gray-200 dark:border-gray-700"
-                                          >
-                                            <td className="p-2 font-medium">
-                                              {it.workDate}
-                                            </td>
-                                            <td className="p-2">
-                                              {formatIsoToHm(it.checkInAt)}
-                                            </td>
-                                            <td className="p-2">
-                                              {formatIsoToHm(it.checkOutAt)}
-                                            </td>
-                                            <td className="p-2">
-                                              {it.workMinutes == null
-                                                ? '-'
-                                                : formatMinutes(it.workMinutes)}
-                                            </td>
-                                            <td className="p-2">
-                                              {it.isCorrected ? 'Y' : '-'}
-                                            </td>
-                                            <td className="p-2">
-                                              <button
-                                                type="button"
-                                                className="rounded border px-2 py-1 text-[11px] hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
-                                                onClick={() =>
-                                                  setSelectedAttendance({
-                                                    attendanceId: it.attendanceId,
-                                                    workDate: it.workDate,
-                                                    checkInAt: it.checkInAt,
-                                                    checkOutAt: it.checkOutAt,
-                                                  })
-                                                }
-                                                disabled={reportLoading}
-                                              >
-                                                정정 요청
-                                              </button>
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          ) : null}
-                        </Fragment>
-                      );
-                    }
+                    (e: AdminAttendanceReportEmployeeResponse) => (
+                      <tr
+                        key={e.userId}
+                        className="border-b border-gray-300 dark:border-gray-600"
+                      >
+                        <td className="p-2 font-medium">
+                          #{e.userId} · {e.username}
+                        </td>
+                        <td className="p-2">{e.totalDays}일</td>
+                        <td className="p-2">
+                          {formatMinutes(e.totalWorkMinutes)}
+                        </td>
+                        <td className="p-2">{e.missingCheckoutCount}</td>
+                        <td className="p-2">{e.correctedCount}</td>
+                        <td className="p-2">
+                          <button
+                            type="button"
+                            className="rounded border border-gray-400 px-2 py-1 text-xs hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
+                            onClick={() => {
+                              setSelectedEmployee({
+                                userId: e.userId,
+                                username: e.username,
+                                items: e.items,
+                              });
+                            }}
+                            disabled={reportLoading}
+                          >
+                            상세 보기
+                          </button>
+                        </td>
+                      </tr>
+                    )
                   )}
                 </tbody>
               </table>
+              <EmployeeDetailModal
+                open={!!selectedEmployee}
+                title={
+                  selectedEmployee
+                    ? `#${selectedEmployee.userId} · ${selectedEmployee.username} 상세`
+                    : '상세'
+                }
+                items={selectedEmployee?.items ?? []}
+                submitting={reportLoading}
+                onClose={() => setSelectedEmployee(null)}
+                onRequestCorrection={(it) => {
+                  setSelectedAttendance(it);
+                }}
+              />
             </div>
           )}
         </>
@@ -545,7 +810,9 @@ export default function ReportTab({
       {user && selectedAttendance && (
         <CorrectionRequestModal
           open={!!selectedAttendance}
-          onClose={() => setSelectedAttendance(null)}
+          onClose={() => {
+            setSelectedAttendance(null);
+          }}
           baseUrl={baseUrl}
           attendanceId={selectedAttendance.attendanceId}
           workDate={selectedAttendance.workDate}
@@ -559,5 +826,113 @@ export default function ReportTab({
         />
       )}
     </section>
+  );
+}
+
+function EmployeeDetailModal(props: {
+  open: boolean;
+  title: string;
+  items: AdminAttendanceReportEmployeeResponse['items'];
+  submitting: boolean;
+  onClose: () => void;
+  onRequestCorrection: (it: {
+    attendanceId: number;
+    workDate: string;
+    checkInAt: string | null;
+    checkOutAt: string | null;
+  }) => void;
+}) {
+  const { open, title, items, submitting, onClose, onRequestCorrection } =
+    props;
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-busy={submitting}
+      onMouseDown={(ev) => {
+        if (submitting) return;
+        if (ev.target === ev.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-lg bg-white p-4 shadow text-gray-900 dark:bg-gray-800 dark:text-gray-100 flex flex-col">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">{title}</h3>
+            <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+              선택한 기간의 근태 상세 내역입니다.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded border border-gray-400 px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
+          >
+            닫기
+          </button>
+        </div>
+
+        <div className="mt-3 flex-1 overflow-hidden">
+          {items.length === 0 ? (
+            <div className="rounded border border-gray-300 bg-gray-100 p-3 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-950 dark:text-gray-200">
+              선택한 기간에 해당하는 근태 항목이 없습니다.
+            </div>
+          ) : (
+            <div className="overflow-auto max-h-[70vh]">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="sticky top-0 z-10 border-b border-gray-300 bg-gray-100 text-left dark:border-gray-600 dark:bg-gray-950">
+                    <th className="p-2">일자</th>
+                    <th className="p-2">출근</th>
+                    <th className="p-2">퇴근</th>
+                    <th className="p-2">근무</th>
+                    <th className="p-2">정정</th>
+                    <th className="p-2">정정 요청</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((it) => (
+                    <tr
+                      key={it.attendanceId}
+                      className="border-b border-gray-300 dark:border-gray-600"
+                    >
+                      <td className="p-2 font-medium">{it.workDate}</td>
+                      <td className="p-2">{formatIsoToHm(it.checkInAt)}</td>
+                      <td className="p-2">{formatIsoToHm(it.checkOutAt)}</td>
+                      <td className="p-2">
+                        {it.workMinutes == null
+                          ? '-'
+                          : formatMinutes(it.workMinutes)}
+                      </td>
+                      <td className="p-2">{it.isCorrected ? 'Y' : '-'}</td>
+                      <td className="p-2">
+                        <button
+                          type="button"
+                          className="rounded border border-gray-400 px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
+                          onClick={() =>
+                            onRequestCorrection({
+                              attendanceId: it.attendanceId,
+                              workDate: it.workDate,
+                              checkInAt: it.checkInAt,
+                              checkOutAt: it.checkOutAt,
+                            })
+                          }
+                          disabled={submitting}
+                        >
+                          정정 요청
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -12,7 +12,7 @@ import type {
   EmployeeRole,
 } from '@/lib/api/types';
 import ReportTab from '@/app/admin/sites/_components/ReportTab';
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -90,6 +90,7 @@ function AttendanceReportPageInner() {
   const [onlyCorrected, setOnlyCorrected] = useState(false);
 
   const [applySummaryFilter, setApplySummaryFilter] = useState(true);
+  const [autoLoad, setAutoLoad] = useState(false);
 
   const [selectedAttendance, setSelectedAttendance] = useState<{
     attendanceId: number;
@@ -98,6 +99,8 @@ function AttendanceReportPageInner() {
     checkOutAt: string | null;
   } | null>(null);
   const [toast, setToast] = useState<string>('');
+  const loadSeqRef = useRef(0);
+  const lastLoadedRef = useRef<{ from: string; to: string } | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -110,6 +113,79 @@ function AttendanceReportPageInner() {
     // YYYY-MM-DD는 문자열 비교로도 안전
     return from > to;
   }, [from, to]);
+
+  const quickPreset = useMemo(() => {
+    if (!from || !to)
+      return null as
+        | 'today'
+        | 'week'
+        | 'thisMonth'
+        | 'prevMonth'
+        | 'nextMonth'
+        | null;
+
+    const now = new Date();
+    const today = toYmdLocal(now);
+    if (from === today && to === today) return 'today';
+
+    // 이번주(월~일) 기준은 "현재 날짜"로
+    const day = now.getDay();
+    const diffToMon = (day + 6) % 7;
+    const mon = addDays(now, -diffToMon);
+    const sun = addDays(mon, 6);
+    if (from === toYmdLocal(mon) && to === toYmdLocal(sun)) return 'week';
+
+    // 이번달(현재 날짜 기준)
+    const firstThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    if (
+      from === toYmdLocal(firstThisMonth) &&
+      to === toYmdLocal(lastThisMonth)
+    ) {
+      return 'thisMonth';
+    }
+
+    // 지난달/다음달은 "현재 선택된 from" 기준
+    const base = new Date(from + 'T00:00:00');
+    const firstBase = new Date(base.getFullYear(), base.getMonth(), 1);
+
+    const lastPrev = new Date(firstBase);
+    lastPrev.setDate(0);
+    const firstPrev = new Date(lastPrev.getFullYear(), lastPrev.getMonth(), 1);
+    if (from === toYmdLocal(firstPrev) && to === toYmdLocal(lastPrev))
+      return 'prevMonth';
+
+    const firstNext = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+    const lastNext = new Date(base.getFullYear(), base.getMonth() + 2, 0);
+    if (from === toYmdLocal(firstNext) && to === toYmdLocal(lastNext))
+      return 'nextMonth';
+
+    return null;
+  }, [from, to]);
+
+  const isDirty = useMemo(() => {
+    if (autoLoad) return false;
+    const last = lastLoadedRef.current;
+    if (!last) return false;
+    return last.from !== from || last.to !== to;
+  }, [autoLoad, from, to]);
+
+  // 자동 조회(필터 변경 시): from/to 변경을 약간 지연 후 조회
+  useEffect(() => {
+    if (!autoLoad) return;
+    if (!ready) return;
+    if (!user) return;
+    if (!isEmployee) return;
+    if (!from || !to) return;
+    if (from > to) return;
+
+    const t = setTimeout(() => {
+      void load({ from, to });
+    }, 350);
+
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoad, from, to, ready, user, isEmployee]);
 
   const displayedItems = useMemo(() => {
     if (!data) return [];
@@ -172,13 +248,15 @@ function AttendanceReportPageInner() {
     const effectiveTo = override?.to ?? to;
 
     if (!effectiveFrom || !effectiveTo) {
-      setFlashMessage('from/to를 입력해 주세요.');
+      setFlashMessage('시작일/종료일을 입력해 주세요.');
       return;
     }
     if (effectiveFrom > effectiveTo) {
-      setFlashMessage('from은 to보다 이후일 수 없습니다.');
+      setFlashMessage('시작일은 종료일보다 이후일 수 없습니다.');
       return;
     }
+
+    const mySeq = ++loadSeqRef.current;
 
     setLoading(true);
     clearMessage();
@@ -187,13 +265,35 @@ function AttendanceReportPageInner() {
         from: effectiveFrom,
         to: effectiveTo,
       });
+      if (mySeq !== loadSeqRef.current) return;
       setData(res);
+      lastLoadedRef.current = { from: effectiveFrom, to: effectiveTo };
     } catch (e) {
+      if (mySeq !== loadSeqRef.current) return;
       setData(null);
       setFlashMessage(toUserMessage(e));
     } finally {
-      setLoading(false);
+      if (mySeq === loadSeqRef.current) setLoading(false);
     }
+  }
+
+  function setRangeAndMaybeLoad(nf: string, nt: string) {
+    setFrom(nf);
+    setTo(nt);
+    // 빠른 선택 버튼은 즉시 조회까지 수행
+    void load({ from: nf, to: nt });
+  }
+
+  function resetFilters() {
+    setFrom(defaults.from);
+    setTo(defaults.to);
+    setOnlyMissingCheckout(false);
+    setOnlyCorrected(false);
+    setApplySummaryFilter(true);
+    setToast('');
+    clearMessage();
+    setData(null);
+    void load({ from: defaults.from, to: defaults.to });
   }
 
   function downloadCsv(kind: 'all' | 'displayed') {
@@ -274,7 +374,7 @@ function AttendanceReportPageInner() {
   }, [ready, user, forbidden, isAdminOrManager]);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+    <div className="min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <AppHeader />
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
@@ -283,7 +383,7 @@ function AttendanceReportPageInner() {
             근태 리포트
           </h1>
           <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-            기간(from~to) 동안의 근무일/총 근무시간을 확인합니다.
+            기간(시작일~종료일) 동안의 근무일/총 근무시간을 확인합니다.
           </div>
         </div>
 
@@ -322,32 +422,65 @@ function AttendanceReportPageInner() {
         )}
 
         {!forbidden && isEmployee && (
-          <section className="mb-4 rounded border bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <section className="mb-4 rounded border border-gray-300 bg-white p-4 text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <div className="text-xs text-gray-700 dark:text-gray-200">
-                프리셋
+              <div className="text-xs font-medium text-gray-800 dark:text-gray-200">
+                빠른 선택
               </div>
+              {loading && (
+                <span className="ml-1 rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700 dark:border-gray-600 dark:bg-gray-950 dark:text-gray-200">
+                  조회 중…
+                </span>
+              )}
 
               <button
                 type="button"
-                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+                  quickPreset === 'today'
+                    ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+                    : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+                }`}
                 disabled={loading}
                 onClick={() => {
                   const now = new Date();
-                  const f = new Date(now.getFullYear(), now.getMonth(), 1);
-                  const nf = toYmdLocal(f);
+                  const nf = toYmdLocal(now);
                   const nt = toYmdLocal(now);
-                  setFrom(nf);
-                  setTo(nt);
-                  void load({ from: nf, to: nt });
+                  setRangeAndMaybeLoad(nf, nt);
                 }}
               >
-                이번 달
+                오늘
               </button>
 
               <button
                 type="button"
-                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+                  quickPreset === 'week'
+                    ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+                    : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+                }`}
+                disabled={loading}
+                onClick={() => {
+                  const now = new Date();
+                  // 이번주(월~일)
+                  const day = now.getDay();
+                  const diffToMon = (day + 6) % 7;
+                  const mon = addDays(now, -diffToMon);
+                  const sun = addDays(mon, 6);
+                  const nf = toYmdLocal(mon);
+                  const nt = toYmdLocal(sun);
+                  setRangeAndMaybeLoad(nf, nt);
+                }}
+              >
+                이번주
+              </button>
+
+              <button
+                type="button"
+                className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+                  quickPreset === 'thisMonth'
+                    ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+                    : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+                }`}
                 disabled={loading}
                 onClick={() => {
                   const now = new Date();
@@ -356,73 +489,121 @@ function AttendanceReportPageInner() {
                     now.getMonth(),
                     1
                   );
-                  const lastPrevMonth = addDays(firstThisMonth, -1);
-                  const firstPrevMonth = new Date(
-                    lastPrevMonth.getFullYear(),
-                    lastPrevMonth.getMonth(),
+                  const lastThisMonth = new Date(
+                    now.getFullYear(),
+                    now.getMonth() + 1,
+                    0
+                  );
+                  const nf = toYmdLocal(firstThisMonth);
+                  const nt = toYmdLocal(lastThisMonth);
+                  setRangeAndMaybeLoad(nf, nt);
+                }}
+              >
+                이번달
+              </button>
+
+              <button
+                type="button"
+                className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+                  quickPreset === 'prevMonth'
+                    ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+                    : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+                }`}
+                disabled={loading}
+                onClick={() => {
+                  const base = from ? new Date(from + 'T00:00:00') : new Date();
+                  const firstThis = new Date(
+                    base.getFullYear(),
+                    base.getMonth(),
                     1
                   );
-                  const nf = toYmdLocal(firstPrevMonth);
-                  const nt = toYmdLocal(lastPrevMonth);
-                  setFrom(nf);
-                  setTo(nt);
-                  void load({ from: nf, to: nt });
+                  const lastPrev = new Date(firstThis);
+                  lastPrev.setDate(0);
+                  const firstPrev = new Date(
+                    lastPrev.getFullYear(),
+                    lastPrev.getMonth(),
+                    1
+                  );
+                  const nf = toYmdLocal(firstPrev);
+                  const nt = toYmdLocal(lastPrev);
+                  setRangeAndMaybeLoad(nf, nt);
                 }}
               >
-                지난 달
+                지난달
               </button>
 
               <button
                 type="button"
-                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                className={`rounded border px-2 py-1 text-xs disabled:opacity-50 ${
+                  quickPreset === 'nextMonth'
+                    ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+                    : 'border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800'
+                }`}
                 disabled={loading}
                 onClick={() => {
-                  const now = new Date();
-                  const nf = toYmdLocal(addDays(now, -6));
-                  const nt = toYmdLocal(now);
-                  setFrom(nf);
-                  setTo(nt);
-                  void load({ from: nf, to: nt });
+                  const base = from ? new Date(from + 'T00:00:00') : new Date();
+                  const firstNextMonth = new Date(
+                    base.getFullYear(),
+                    base.getMonth() + 1,
+                    1
+                  );
+                  const lastNextMonth = new Date(
+                    base.getFullYear(),
+                    base.getMonth() + 2,
+                    0
+                  );
+                  const nf = toYmdLocal(firstNextMonth);
+                  const nt = toYmdLocal(lastNextMonth);
+                  setRangeAndMaybeLoad(nf, nt);
                 }}
               >
-                최근 7일
+                다음달
               </button>
 
-              <button
-                type="button"
-                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
-                disabled={loading}
-                onClick={() => {
-                  const now = new Date();
-                  const nf = toYmdLocal(addDays(now, -29));
-                  const nt = toYmdLocal(now);
-                  setFrom(nf);
-                  setTo(nt);
-                  void load({ from: nf, to: nt });
-                }}
-              >
-                최근 30일
-              </button>
+              <div className="ml-auto flex items-center gap-2">
+                {isDirty && (
+                  <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-100">
+                    변경됨 · 조회 필요
+                  </span>
+                )}
+                <label className="flex items-center gap-2 text-xs text-gray-800 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={autoLoad}
+                    onChange={(e) => setAutoLoad(e.target.checked)}
+                    disabled={loading}
+                  />
+                  자동 조회
+                </label>
+                <button
+                  type="button"
+                  className="rounded border border-gray-400 px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
+                  disabled={loading}
+                  onClick={resetFilters}
+                >
+                  초기화
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
-              <label className="text-xs text-gray-700 dark:text-gray-200">
-                from
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-6 sm:items-end">
+              <label className="text-xs text-gray-800 dark:text-gray-200 sm:col-span-3">
+                <span className="block mb-1">시작일</span>
                 <input
                   type="date"
                   value={from}
                   onChange={(e) => setFrom(e.target.value)}
-                  className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                  className="mt-0 w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100 md:w-1/2"
                   disabled={loading}
                 />
               </label>
 
-              <label className="text-xs text-gray-700 dark:text-gray-200">
-                to
+              <label className="text-xs text-gray-800 dark:text-gray-200 sm:col-span-3">
+                <span className="block mb-1">종료일</span>
                 <input
                   type="date"
                   value={to}
                   onChange={(e) => setTo(e.target.value)}
-                  className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                  className="mt-0 w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100 md:w-1/2"
                   disabled={loading}
                 />
               </label>
@@ -431,18 +612,18 @@ function AttendanceReportPageInner() {
                 type="button"
                 onClick={() => void load()}
                 disabled={loading || !ready || !user || invalidRange}
-                className="h-10 rounded border px-3 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                className="h-10 rounded border border-gray-400 px-3 text-sm hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800 sm:col-span-6"
               >
                 {loading ? '조회 중…' : '조회'}
               </button>
             </div>
             {invalidRange && (
               <div className="mt-2 text-[11px] text-red-600">
-                * from은 to보다 이후일 수 없습니다.
+                * 시작일은 종료일보다 이후일 수 없습니다.
               </div>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+              <label className="flex items-center gap-2 text-xs text-gray-800 dark:text-gray-200">
                 <input
                   type="checkbox"
                   checked={onlyMissingCheckout}
@@ -452,7 +633,7 @@ function AttendanceReportPageInner() {
                 퇴근 누락만
               </label>
 
-              <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+              <label className="flex items-center gap-2 text-xs text-gray-800 dark:text-gray-200">
                 <input
                   type="checkbox"
                   checked={onlyCorrected}
@@ -461,7 +642,7 @@ function AttendanceReportPageInner() {
                 />
                 정정 포함만
               </label>
-              <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+              <label className="flex items-center gap-2 text-xs text-gray-800 dark:text-gray-200">
                 <input
                   type="checkbox"
                   checked={applySummaryFilter}
@@ -471,40 +652,6 @@ function AttendanceReportPageInner() {
                 집계에도 필터 적용
               </label>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => downloadCsv('displayed')}
-                disabled={
-                  loading ||
-                  !data ||
-                  displayedItems.length === 0 ||
-                  invalidRange
-                }
-                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
-              >
-                CSV(표시 {displayedItems.length}건)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => downloadCsv('all')}
-                disabled={
-                  loading ||
-                  !data ||
-                  (data?.items?.length ?? 0) === 0 ||
-                  invalidRange
-                }
-                className="rounded border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
-              >
-                CSV(전체 {data?.items?.length ?? 0}건)
-              </button>
-
-              <div className="text-[11px] text-gray-500 dark:text-gray-300">
-                * CSV(표시)는 현재 표시 중인 항목(필터 적용)만 다운로드합니다.
-              </div>
-            </div>
-
             <div className="mt-2 text-[11px] text-gray-500 dark:text-gray-300">
               * 평균 근무 시간은 제공하지 않습니다(요구사항 제외).
             </div>
@@ -512,15 +659,54 @@ function AttendanceReportPageInner() {
         )}
 
         {!forbidden && isEmployee && (
-          <section className="rounded border bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <section className="rounded border border-gray-300 bg-white p-4 text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
             {!data ? (
               <div className="text-sm text-gray-600 dark:text-gray-300">
-                조회 결과가 없습니다.
+                조회 조건을 선택한 뒤 조회해 주세요.
               </div>
             ) : (
               <>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    결과
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => downloadCsv('displayed')}
+                      disabled={
+                        loading ||
+                        !data ||
+                        displayedItems.length === 0 ||
+                        invalidRange
+                      }
+                      className="rounded border border-gray-400 px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
+                    >
+                      CSV 다운로드(표시 {displayedItems.length}건)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => downloadCsv('all')}
+                      disabled={
+                        loading ||
+                        !data ||
+                        (data?.items?.length ?? 0) === 0 ||
+                        invalidRange
+                      }
+                      className="rounded border border-gray-400 px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
+                    >
+                      CSV 다운로드(전체 {data?.items?.length ?? 0}건)
+                    </button>
+
+                    <div className="text-[11px] text-gray-500 dark:text-gray-300">
+                      * 표시 항목은 현재 필터가 적용된 결과입니다.
+                    </div>
+                  </div>
+                </div>
+
                 <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
-                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
                     <div className="text-[11px] text-gray-600 dark:text-gray-300">
                       기간
                     </div>
@@ -528,7 +714,7 @@ function AttendanceReportPageInner() {
                       {data.from} ~ {data.to}
                     </div>
                   </div>
-                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
                     <div className="text-[11px] text-gray-600 dark:text-gray-300">
                       근무일
                     </div>
@@ -536,7 +722,7 @@ function AttendanceReportPageInner() {
                       {data.totalDays}일
                     </div>
                   </div>
-                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
                     <div className="text-[11px] text-gray-600 dark:text-gray-300">
                       총 근무시간
                     </div>
@@ -544,7 +730,7 @@ function AttendanceReportPageInner() {
                       {formatMinutes(summary.totalWorkMinutes)}
                     </div>
                   </div>
-                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
                     <div className="text-[11px] text-gray-600 dark:text-gray-300">
                       정정
                     </div>
@@ -552,7 +738,7 @@ function AttendanceReportPageInner() {
                       {summary.correctedCount}건 ({summary.correctedRatePct}%)
                     </div>
                   </div>
-                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
                     <div className="text-[11px] text-gray-600 dark:text-gray-300">
                       퇴근 누락
                     </div>
@@ -561,7 +747,7 @@ function AttendanceReportPageInner() {
                       {summary.missingCheckoutRatePct}%)
                     </div>
                   </div>
-                  <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
                     <div className="text-[11px] text-gray-600 dark:text-gray-300">
                       유효 근무일
                     </div>
@@ -580,13 +766,13 @@ function AttendanceReportPageInner() {
 
                 {displayedItems.length === 0 ? (
                   <div className="text-sm text-gray-600 dark:text-gray-300">
-                    항목이 없습니다.
+                    선택한 기간/필터 조건에 해당하는 항목이 없습니다.
                   </div>
                 ) : (
-                  <div className="overflow-auto">
+                  <div className="overflow-auto max-h-[70vh]">
                     <table className="w-full border-collapse text-sm">
                       <thead>
-                        <tr className="border-b border-gray-200 bg-gray-50 text-left dark:border-gray-700 dark:bg-gray-900">
+                        <tr className="sticky top-0 z-10 border-b border-gray-400 bg-gray-200 text-left dark:border-gray-600 dark:bg-gray-950">
                           <th className="p-2">일자</th>
                           <th className="p-2">출근</th>
                           <th className="p-2">퇴근</th>
@@ -599,7 +785,7 @@ function AttendanceReportPageInner() {
                         {displayedItems.map((x) => (
                           <tr
                             key={x.attendanceId}
-                            className="border-b border-gray-200 dark:border-gray-700"
+                            className="border-b border-gray-300 dark:border-gray-600"
                           >
                             <td className="p-2 font-medium">{x.workDate}</td>
                             <td className="p-2">
@@ -617,7 +803,7 @@ function AttendanceReportPageInner() {
                             <td className="p-2">
                               <button
                                 type="button"
-                                className="rounded border px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                                className="rounded border border-gray-400 px-2 py-1 text-xs hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
                                 onClick={() =>
                                   setSelectedAttendance({
                                     attendanceId: x.attendanceId,
