@@ -23,6 +23,9 @@ function AttendancePageInner() {
 
   const [message, setMessage] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewAction, setPreviewAction] = useState<'checkin' | 'checkout' | null>(null);
 
   // 메시지 자동 해제(모바일 UX): 너무 오래 남지 않도록 TTL 적용
   const MESSAGE_TTL_MS = 4000;
@@ -68,6 +71,23 @@ function AttendancePageInner() {
 
   const isCheckedIn = today.checkInAt !== null;
   const isCheckedOut = today.checkOutAt !== null;
+
+  function openPreview(action: 'checkin' | 'checkout', file: File) {
+    setPreviewAction(action);
+    setPreviewFile(file);
+    setPreviewOpen(true);
+  }
+
+  function closePreview() {
+    setPreviewOpen(false);
+    setPreviewFile(null);
+    setPreviewAction(null);
+  }
+
+  function retakeFromPreview() {
+    if (previewAction === 'checkin') fileInputRef.current?.click();
+    if (previewAction === 'checkout') checkOutFileInputRef.current?.click();
+  }
 
   function setFlashMessage(next: string) {
     // 새 메시지가 들어오면 기존 타이머는 항상 정리
@@ -133,6 +153,129 @@ function AttendancePageInner() {
 
     // 그 외는 기존 매퍼 사용
     return toUserMessage(e);
+  }
+
+  function PhotoConfirmModal(props: {
+    open: boolean;
+    title: string;
+    file: File | null;
+    submitting: boolean;
+    onRetake: () => void;
+    onCancel: () => void;
+    onConfirm: () => void;
+  }) {
+    const { open, title, file, submitting, onRetake, onCancel, onConfirm } =
+      props;
+
+    const previewUrl = useMemo(() => {
+      if (!file) return null;
+      try {
+        return URL.createObjectURL(file);
+      } catch {
+        return null;
+      }
+    }, [file]);
+
+    useEffect(() => {
+      return () => {
+        if (previewUrl) {
+          try {
+            URL.revokeObjectURL(previewUrl);
+          } catch {
+            // ignore
+          }
+        }
+      };
+    }, [previewUrl]);
+
+    if (!open) return null;
+
+    const sizeLabel = (() => {
+      if (!file) return '';
+      const mb = file.size / (1024 * 1024);
+      return `${mb.toFixed(2)}MB`;
+    })();
+
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-busy={submitting}
+      >
+        <div className="w-full max-w-md rounded-lg bg-white p-4 shadow text-gray-900 dark:bg-gray-800 dark:text-gray-100">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">{title}</h2>
+              {file && (
+                <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                  {file.name} · {sizeLabel}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="rounded px-2 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+              onClick={onCancel}
+              disabled={submitting}
+            >
+              닫기
+            </button>
+          </div>
+
+          <div className="mt-4">
+            <div className="rounded border p-2 dark:border-gray-700">
+              {previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewUrl}
+                  alt="선택한 사진 미리보기"
+                  className="max-h-80 w-full rounded object-contain"
+                />
+              ) : (
+                <div className="flex h-40 items-center justify-center text-sm text-gray-600 dark:text-gray-300">
+                  미리보기를 표시할 수 없습니다.
+                </div>
+              )}
+            </div>
+
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-300">
+              업로드 전에 사진을 확인하고, 필요하면 재선택/재촬영할 수 있습니다.
+            </p>
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              className="flex-1 rounded border px-3 py-2 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700"
+              onClick={onRetake}
+              disabled={submitting}
+            >
+              재선택/재촬영
+            </button>
+            <button
+              type="button"
+              className="flex-1 rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
+              onClick={onConfirm}
+              disabled={!file || submitting}
+            >
+              {submitting ? '업로드 중...' : '업로드'}
+            </button>
+          </div>
+
+          <div className="mt-2">
+            <button
+              type="button"
+              className="w-full rounded px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+              onClick={onCancel}
+              disabled={submitting}
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ADMIN/MANAGER는 진입 차단
@@ -224,7 +367,7 @@ function AttendancePageInner() {
       return;
     }
 
-    await checkInWithPhoto(file);
+    openPreview('checkin', file);
   }
 
   // ✅ 옵션 A: 퇴근도 사진 업로드(멀티파트)
@@ -287,7 +430,20 @@ function AttendancePageInner() {
       return;
     }
 
-    await checkOutWithPhoto(file);
+    openPreview('checkout', file);
+  }
+
+  async function confirmPreviewUpload() {
+    if (!previewFile || !previewAction) return;
+    try {
+      if (previewAction === 'checkin') {
+        await checkInWithPhoto(previewFile);
+      } else {
+        await checkOutWithPhoto(previewFile);
+      }
+    } finally {
+      closePreview();
+    }
   }
 
   if (ready && user && (user.role === 'ADMIN' || user.role === 'MANAGER')) {
@@ -320,7 +476,7 @@ function AttendancePageInner() {
           type="file"
           accept="image/*"
           capture="environment"
-          className="hidden"
+          className="sr-only"
           onChange={handlePhotoSelected}
         />
 
@@ -330,7 +486,7 @@ function AttendancePageInner() {
           type="file"
           accept="image/*"
           capture="environment"
-          className="hidden"
+          className="sr-only"
           onChange={handleCheckOutPhotoSelected}
         />
 
@@ -357,6 +513,16 @@ function AttendancePageInner() {
               : '퇴근'}
           </button>
         </div>
+
+        <PhotoConfirmModal
+          open={previewOpen}
+          title={previewAction === 'checkout' ? '퇴근 사진 확인' : '출근 사진 확인'}
+          file={previewFile}
+          submitting={loading && inflightActionRef.current === previewAction}
+          onRetake={retakeFromPreview}
+          onCancel={closePreview}
+          onConfirm={confirmPreviewUpload}
+        />
 
         {message && <p className="text-lg">{message}</p>}
       </main>
