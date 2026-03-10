@@ -4,7 +4,6 @@ import { Suspense, useMemo, useState } from 'react';
 import AppHeader from '@/app/_components/AppHeader';
 import SitesTab from './_components/SitesTab';
 import EmployeesTab from './_components/EmployeesTab';
-import ReportTab from './_components/ReportTab';
 
 import { useAdminTab } from './_hooks/useAdminTab';
 import type { UseAdminTabParams } from './_hooks/useAdminTab';
@@ -14,12 +13,11 @@ import { useSitesOps } from './_hooks/useSitesOps';
 
 import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
 
-type TabKey = 'sites' | 'employees' | 'report';
+type TabKey = 'sites' | 'employees';
 
 function tabLabel(tab: TabKey): string {
-  if (tab === 'sites') return 'Sites';
-  if (tab === 'employees') return 'Employees';
-  return 'Report';
+  if (tab === 'sites') return '근무지';
+  return '직원';
 }
 
 function AdminSitesPageInner() {
@@ -35,7 +33,7 @@ function AdminSitesPageInner() {
   const { tab, setTabAndSync } = useAdminTab<TabKey>({
     basePath: '/admin/sites',
     defaultTab: 'sites',
-    allowedTabs: ['sites', 'employees', 'report'] as const,
+    allowedTabs: ['sites', 'employees'] as const,
   } satisfies UseAdminTabParams<TabKey>);
 
   const { message, setFlashMessage } = useFlashMessage({ ttlMs: 4000 });
@@ -72,7 +70,7 @@ function AdminSitesPageInner() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+    <div className="min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <AppHeader />
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
@@ -81,15 +79,15 @@ function AdminSitesPageInner() {
             관리자
           </h1>
           <div className="mt-2 flex gap-2">
-            {(['sites', 'employees', 'report'] as const).map((k) => (
+            {(['sites', 'employees'] as const).map((k) => (
               <button
                 key={k}
                 type="button"
                 onClick={() => setTabAndSync(k)}
-                className={`rounded border px-3 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 ${
+                className={`rounded border px-3 py-1 text-xs disabled:opacity-50 ${
                   tab === k
-                    ? 'bg-white dark:bg-gray-800'
-                    : 'bg-gray-50 dark:bg-gray-900'
+                    ? 'border-gray-700 bg-gray-200 text-gray-900 dark:border-gray-300 dark:bg-gray-800 dark:text-gray-100'
+                    : 'border-gray-400 bg-white text-gray-900 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800'
                 }`}
               >
                 {tabLabel(k)}
@@ -99,13 +97,13 @@ function AdminSitesPageInner() {
         </div>
 
         {ready && forbidden && (
-          <div className="mb-4 rounded border bg-white p-4 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+          <div className="mb-4 rounded border border-gray-300 bg-white p-4 text-sm text-gray-800 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
             권한이 없습니다. (ADMIN/MANAGER 전용)
           </div>
         )}
 
         {message && (
-          <div className="mb-4 rounded border bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+          <div className="mb-4 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
             {message}
           </div>
         )}
@@ -205,16 +203,6 @@ function AdminSitesPageInner() {
               refreshManagerAssignments: employeesOps.refreshManagerAssignments,
               applyManagerAssignments: employeesOps.applyManagerAssignments,
             }}
-          />
-        )}
-
-        {tab === 'report' && (
-          <ReportTab
-            user={user}
-            ready={ready}
-            forbidden={forbidden}
-            sites={sitesOps.sites}
-            setFlashMessage={setFlashMessage}
           />
         )}
       </main>
