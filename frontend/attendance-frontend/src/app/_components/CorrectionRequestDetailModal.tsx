@@ -51,6 +51,34 @@ function fmtIso(iso?: string | null): string {
   }
 }
 
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'PENDING':
+      return '승인 대기 중';
+    case 'APPROVED':
+      return '승인됨';
+    case 'REJECTED':
+      return '반려됨';
+    case 'CANCELED':
+      return '취소됨';
+    default:
+      return status;
+  }
+}
+
+function typeLabel(type: string): string {
+  switch (type) {
+    case 'CHECK_IN':
+      return '출근';
+    case 'CHECK_OUT':
+      return '퇴근';
+    case 'BOTH':
+      return '출근+퇴근';
+    default:
+      return type;
+  }
+}
+
 export default function CorrectionRequestDetailModal({
   baseUrl,
   item,
@@ -87,11 +115,11 @@ export default function CorrectionRequestDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
       role="dialog"
       aria-modal="true"
     >
-      <div className="w-full max-w-lg rounded bg-white p-4 shadow text-gray-900 dark:bg-gray-800 dark:text-gray-100">
+      <div className="w-full max-w-lg rounded border border-gray-300 bg-white p-4 shadow text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">정정 요청 상세</h2>
@@ -111,18 +139,18 @@ export default function CorrectionRequestDetailModal({
         <div className="mt-4 space-y-2 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-gray-600 dark:text-gray-300">상태</span>
-            <span className="font-medium">{item.status}</span>
+            <span className="font-medium">{statusLabel(item.status)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-gray-600 dark:text-gray-300">유형</span>
-            <span className="font-medium">{item.type}</span>
+            <span className="font-medium">{typeLabel(item.type)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-gray-600 dark:text-gray-300">요청 시각</span>
             <span className="font-medium">{fmtIso(item.requestedAt)}</span>
           </div>
 
-          <div className="rounded border p-3 dark:border-gray-700">
+          <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
             <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
               제안 시간
             </div>
@@ -142,7 +170,7 @@ export default function CorrectionRequestDetailModal({
             </div>
           </div>
 
-          <div className="rounded border p-3 dark:border-gray-700">
+          <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
             <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
               사유
             </div>
@@ -152,7 +180,7 @@ export default function CorrectionRequestDetailModal({
           </div>
 
           {(item.approveComment || item.rejectReason) && (
-            <div className="rounded border p-3 dark:border-gray-700">
+            <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
               <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
                 처리 코멘트
               </div>
