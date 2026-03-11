@@ -14,15 +14,30 @@ import { toUserMessage } from '@/lib/api/error-messages';
 function badgeClass(status: string): string {
   switch (status) {
     case 'PENDING':
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200';
+      return 'bg-blue-200 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100';
     case 'APPROVED':
-      return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200';
+      return 'bg-green-200 text-green-900 dark:bg-green-900/40 dark:text-green-100';
     case 'REJECTED':
-      return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200';
+      return 'bg-red-200 text-red-900 dark:bg-red-900/40 dark:text-red-100';
     case 'CANCELED':
-      return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200';
+      return 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100';
     default:
-      return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200';
+      return 'bg-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100';
+  }
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'PENDING':
+      return '승인 대기 중';
+    case 'APPROVED':
+      return '승인됨';
+    case 'REJECTED':
+      return '반려됨';
+    case 'CANCELED':
+      return '취소됨';
+    default:
+      return status;
   }
 }
 
@@ -53,6 +68,33 @@ type CorrectionRequestListResponse = {
   size: number;
   totalElements: number;
 };
+
+type SiteOption = { siteId: number; name: string; active: boolean };
+
+type EmployeeOption = {
+  userId: number;
+  username?: string;
+  role?: string;
+  active?: boolean;
+  siteId: number;
+};
+
+function getTargetUserId(it: CorrectionRequestListItem): number {
+  const anyIt = it as unknown as Record<string, unknown>;
+  const candidates = [
+    anyIt['targetUserId'],
+    anyIt['employeeUserId'],
+    anyIt['userId'],
+    anyIt['requestedBy'],
+  ];
+  for (const v of candidates) {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string' && v.trim() && Number.isFinite(Number(v))) {
+      return Number(v);
+    }
+  }
+  return Number(it.requestedBy);
+}
 
 type StatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED';
 
@@ -87,6 +129,15 @@ function CorrectionsPageInner() {
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
 
+  const [sites, setSites] = useState<SiteOption[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+
+  const [sitePick, setSitePick] = useState<string>('');
+  const [userPick, setUserPick] = useState<string>('');
+
+  const [siteApplied, setSiteApplied] = useState<string>('');
+  const [userApplied, setUserApplied] = useState<string>('');
+
   const fetchList = useCallback(async () => {
     if (!user) return;
 
@@ -118,6 +169,25 @@ function CorrectionsPageInner() {
 
   useEffect(() => {
     if (!user) return;
+    if (!isApprover) return;
+
+    (async () => {
+      try {
+        const [s, e] = await Promise.all([
+          apiFetch<SiteOption[]>(`${baseUrl}/api/admin/sites`),
+          apiFetch<EmployeeOption[]>(`${baseUrl}/api/admin/employees`),
+        ]);
+        setSites(Array.isArray(s) ? s : []);
+        setEmployees(Array.isArray(e) ? e : []);
+      } catch {
+        setSites([]);
+        setEmployees([]);
+      }
+    })();
+  }, [user, isApprover, baseUrl]);
+
+  useEffect(() => {
+    if (!user) return;
     fetchList();
   }, [user, fetchList]);
 
@@ -130,6 +200,28 @@ function CorrectionsPageInner() {
     }
   }, [user, isApprover, tab, router]);
 
+  const employeeByUserId = useMemo(() => {
+    const m = new Map<number, EmployeeOption>();
+    for (const e of employees) m.set(Number(e.userId), e);
+    return m;
+  }, [employees]);
+
+  // ✅ 관리자/매니저는 출퇴근 입력 대상이 아니므로 직원 필터 대상에서 제외
+  const filterEligibleEmployees = useMemo(() => {
+    return employees.filter((e) => String(e.role) === 'EMPLOYEE');
+  }, [employees]);
+
+  const userOptions = useMemo(() => {
+    const sid = sitePick ? Number(sitePick) : null;
+    const list = sid
+      ? filterEligibleEmployees.filter((e) => Number(e.siteId) === sid)
+      : filterEligibleEmployees;
+    return [...list].sort((a, b) => Number(a.userId) - Number(b.userId));
+  }, [filterEligibleEmployees, sitePick]);
+
+  const showFilterBar =
+    effectiveTab === 'approvable' || (effectiveTab === 'my' && isApprover);
+
   function switchTab(next: 'my' | 'approvable') {
     // ✅ 비승인자는 approvable로 전환 불가(표시/접근 일관성)
     if (next === 'approvable' && !isApprover) {
@@ -139,17 +231,45 @@ function CorrectionsPageInner() {
 
     // URL로 탭 상태 유지(뒤로가기 UX 포함)
     setStatusFilter('ALL');
+    setSitePick('');
+    setUserPick('');
+    setSiteApplied('');
+    setUserApplied('');
     const q = next === 'approvable' ? '?tab=approvable' : '?tab=my';
     router.replace(`/corrections${q}`);
+  }
+
+  async function applyFilters() {
+    setSiteApplied(sitePick);
+    setUserApplied(userPick);
+    await fetchList();
   }
 
   const displayedItems = useMemo(() => {
     // ✅ 목록 UX 보강(최소): 상태 필터 + 요청시각 내림차순 정렬
     // - 서버 정렬/필터가 아직 없다면 클라이언트에서 1차 대응
-    const filtered =
+    const statusFiltered =
       effectiveTab === 'my' && statusFilter !== 'ALL'
         ? items.filter((it) => String(it.status) === statusFilter)
         : items;
+
+    let filtered = statusFiltered;
+
+    if (showFilterBar) {
+      const sid = siteApplied ? Number(siteApplied) : null;
+      const uid = userApplied ? Number(userApplied) : null;
+
+      if (sid) {
+        filtered = filtered.filter((it) => {
+          const tu = getTargetUserId(it);
+          const emp = employeeByUserId.get(tu);
+          return emp ? Number(emp.siteId) === sid : false;
+        });
+      }
+      if (uid) {
+        filtered = filtered.filter((it) => getTargetUserId(it) === uid);
+      }
+    }
 
     // requestedAt이 없을 수 있으므로 requestId로 fallback(내림차순)
     return [...filtered].sort((a, b) => {
@@ -161,10 +281,18 @@ function CorrectionsPageInner() {
 
       return bKey - aKey;
     });
-  }, [items, effectiveTab, statusFilter]);
+  }, [
+    items,
+    effectiveTab,
+    statusFilter,
+    showFilterBar,
+    siteApplied,
+    userApplied,
+    employeeByUserId,
+  ]);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+    <div className="min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <AppHeader />
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
@@ -173,7 +301,7 @@ function CorrectionsPageInner() {
           <button
             type="button"
             onClick={fetchList}
-            className="rounded border px-3 py-2 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
+            className="rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 hover:bg-gray-100 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
             disabled={loading}
             aria-busy={loading}
           >
@@ -192,7 +320,7 @@ function CorrectionsPageInner() {
             }`}
             disabled={loading}
           >
-            내 정정 요청
+            내가 요청한 목록
           </button>
           {isApprover && (
             <button
@@ -205,19 +333,78 @@ function CorrectionsPageInner() {
               }`}
               disabled={loading}
             >
-              정정 승인 대기
+              승인 가능한 목록
             </button>
           )}
         </div>
+
+        {showFilterBar && (
+          <section className="mt-3 rounded border border-gray-300 bg-white p-3 text-sm dark:border-gray-600 dark:bg-gray-900">
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="text-xs text-gray-800 dark:text-gray-200">
+                <span className="block mb-1">근무지</span>
+                <select
+                  className="w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100"
+                  value={sitePick}
+                  onChange={(e) => {
+                    setSitePick(e.target.value);
+                    setUserPick('');
+                  }}
+                  disabled={loading || sites.length === 0}
+                >
+                  <option value="">전체</option>
+                  {sites.map((s) => (
+                    <option key={s.siteId} value={String(s.siteId)}>
+                      {s.name} (#{s.siteId})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-xs text-gray-800 dark:text-gray-200">
+                <span className="block mb-1">직원</span>
+                <select
+                  className="w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100"
+                  value={userPick}
+                  onChange={(e) => setUserPick(e.target.value)}
+                  disabled={loading || filterEligibleEmployees.length === 0}
+                >
+                  <option value="">전체</option>
+                  {userOptions.map((u) => (
+                    <option key={u.userId} value={String(u.userId)}>
+                      {u.username ? `${u.username} ` : ''}#{u.userId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={applyFilters}
+                  className="w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+                  disabled={loading}
+                  aria-busy={loading}
+                >
+                  조회
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-gray-700 dark:text-gray-200">
+              ※ 관리자/매니저만 근무지/직원 필터를 사용할 수 있습니다.
+            </p>
+          </section>
+        )}
+
         {effectiveTab === 'my' && (
           <div className="mt-3 flex flex-wrap gap-2">
             {(
               [
                 ['ALL', '전체'],
-                ['PENDING', '대기'],
-                ['APPROVED', '승인'],
-                ['REJECTED', '반려'],
-                ['CANCELED', '취소'],
+                ['PENDING', '승인 대기'],
+                ['APPROVED', '승인됨'],
+                ['REJECTED', '반려됨'],
+                ['CANCELED', '취소됨'],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -259,7 +446,7 @@ function CorrectionsPageInner() {
         )}
 
         {!loading && !error && displayedItems.length > 0 && (
-          <section className="mt-4 rounded border dark:border-gray-700 dark:bg-gray-800">
+          <section className="mt-4 rounded border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-900">
             <ul className="divide-y dark:divide-gray-700">
               {displayedItems.map((it) => {
                 const requestedAt = getOptionalStringField(it, 'requestedAt');
@@ -273,7 +460,7 @@ function CorrectionsPageInner() {
                           ? `/corrections/${it.requestId}?tab=approvable`
                           : `/corrections/${it.requestId}?tab=my`
                       }
-                      className="block w-full rounded hover:bg-gray-50 dark:hover:bg-gray-800"
+                      className="block w-full rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex flex-col gap-1">
@@ -290,18 +477,18 @@ function CorrectionsPageInner() {
                             <span
                               className={`rounded px-2 py-1 text-xs ${badgeClass(String(it.status))}`}
                             >
-                              {it.status}
+                              {statusLabel(String(it.status))}
                             </span>
 
                             {workDate ? (
                               <span className="text-xs text-gray-600 dark:text-gray-300">
-                                대상 {workDate}
+                                대상 날짜 {workDate}
                               </span>
                             ) : null}
 
                             {effectiveTab === 'approvable' ? (
                               <span className="text-xs text-gray-600 dark:text-gray-300">
-                                요청자 {it.requestedBy}
+                                요청자 ID {it.requestedBy}
                               </span>
                             ) : null}
                           </div>

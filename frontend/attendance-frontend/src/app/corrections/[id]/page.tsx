@@ -59,6 +59,34 @@ function isApproverRole(role?: string): boolean {
   return role === 'MANAGER' || role === 'ADMIN';
 }
 
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'PENDING':
+      return '승인 대기 중';
+    case 'APPROVED':
+      return '승인됨';
+    case 'REJECTED':
+      return '반려됨';
+    case 'CANCELED':
+      return '취소됨';
+    default:
+      return status;
+  }
+}
+
+function typeLabel(type: string): string {
+  switch (type) {
+    case 'CHECK_IN':
+      return '출근';
+    case 'CHECK_OUT':
+      return '퇴근';
+    case 'BOTH':
+      return '출근+퇴근';
+    default:
+      return type;
+  }
+}
+
 function fmtDate(iso?: string | null): string {
   if (!iso) return '-';
   try {
@@ -486,7 +514,7 @@ function CorrectionDetailPageInner() {
   const showApproveReject = !!data && data.status === 'PENDING' && isApprover;
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+    <div className="min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <AppHeader />
 
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
@@ -494,7 +522,7 @@ function CorrectionDetailPageInner() {
           <h1 className="text-2xl font-bold">정정 요청 상세</h1>
           <button
             type="button"
-            className="rounded border px-3 py-1 text-sm dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+            className="rounded border border-gray-400 bg-white px-3 py-1 text-sm hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
             onClick={() => router.push(backToListUrl)}
           >
             목록
@@ -526,7 +554,7 @@ function CorrectionDetailPageInner() {
         )}
 
         {!loading && !error && data && (
-          <section className="mt-4 rounded border p-4 text-sm dark:border-gray-700 dark:bg-gray-800">
+          <section className="mt-4 rounded border border-gray-300 bg-white p-4 text-sm dark:border-gray-600 dark:bg-gray-900">
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-baseline gap-2">
@@ -536,13 +564,13 @@ function CorrectionDetailPageInner() {
                   </span>
                 </div>
                 <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-gray-900/50 dark:text-gray-200">
-                  {data.status}
+                  {statusLabel(data.status)}
                 </span>
               </div>
 
               <div className="text-gray-700 dark:text-gray-200">
                 <div>근태 ID: {data.attendanceId}</div>
-                <div>유형: {data.type}</div>
+                <div>유형: {typeLabel(data.type)}</div>
 
                 {/* ✅ 원본(현재) vs 제안 비교 */}
                 {(() => {
@@ -557,52 +585,53 @@ function CorrectionDetailPageInner() {
                     propIn ?? propOut ?? baseIn ?? baseOut ?? data.requestedAt
                   );
 
-                  const summaryParts: string[] = [];
-                  if (propIn && baseIn && fmtHm(propIn) !== fmtHm(baseIn)) {
-                    summaryParts.push(
-                      `출근 ${fmtHm(baseIn)} → ${fmtHm(propIn)}`
-                    );
-                  }
-                  if (propOut && baseOut && fmtHm(propOut) !== fmtHm(baseOut)) {
-                    summaryParts.push(
-                      `퇴근 ${fmtHm(baseOut)} → ${fmtHm(propOut)}`
-                    );
-                  }
+                  const baseInHm = baseIn ? fmtHm(baseIn) : null;
+                  const baseOutHm = baseOut ? fmtHm(baseOut) : null;
+                  const propInHm = propIn ? fmtHm(propIn) : null;
+                  const propOutHm = propOut ? fmtHm(propOut) : null;
+
+                  const inChanged = !!(
+                    propInHm && (baseInHm ? propInHm !== baseInHm : true)
+                  );
+                  const outChanged = !!(
+                    propOutHm && (baseOutHm ? propOutHm !== baseOutHm : true)
+                  );
 
                   return (
                     <div className="mt-2">
                       <div className="text-xs text-gray-600 dark:text-gray-300">
                         대상 날짜: {targetDate}
                       </div>
-                      {summaryParts.length > 0 ? (
-                        <div className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                          변경 요약: {summaryParts.join(' · ')}
-                        </div>
-                      ) : null}
-
-                      <div className="mt-3 grid gap-2 md:grid-cols-2">
-                        <div className="rounded border bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
-                          <div className="text-xs font-medium text-gray-700 dark:text-gray-200">
-                            제안 전
-                          </div>
-                          <div className="mt-2 text-xs text-gray-700 dark:text-gray-200">
-                            <div>출근: {baseIn ? fmtHm(baseIn) : '-'}</div>
-                            <div>퇴근: {baseOut ? fmtHm(baseOut) : '-'}</div>
-                            {!baseIn && !baseOut ? (
-                              <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">
-                                제안 전 시간이 응답에 포함되지 않았습니다.
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <div className="rounded border bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                      <div className="mt-3">
+                        <div className="rounded border border-gray-300 bg-white p-3 dark:border-gray-600 dark:bg-gray-900">
                           <div className="text-xs font-medium text-gray-700 dark:text-gray-200">
                             제안
                           </div>
                           <div className="mt-2 text-xs text-gray-700 dark:text-gray-200">
-                            <div>출근: {propIn ? fmtHm(propIn) : '-'}</div>
-                            <div>퇴근: {propOut ? fmtHm(propOut) : '-'}</div>
+                            <div className="flex items-center gap-3">
+                              <span className="w-10">출근</span>
+                              {inChanged ? (
+                                <span className="font-medium text-red-700 dark:text-red-300">
+                                  {baseInHm ?? '-'} → {propInHm}
+                                </span>
+                              ) : (
+                                <span className="font-medium text-gray-700 dark:text-gray-200">
+                                  변경 없음
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="w-10">퇴근</span>
+                              {outChanged ? (
+                                <span className="font-medium text-red-700 dark:text-red-300">
+                                  {baseOutHm ?? '-'} → {propOutHm}
+                                </span>
+                              ) : (
+                                <span className="font-medium text-gray-700 dark:text-gray-200">
+                                  변경 없음
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -649,7 +678,7 @@ function CorrectionDetailPageInner() {
                   <textarea
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    className="mt-1 w-full rounded border px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    className="mt-1 w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100"
                     rows={3}
                     placeholder="(선택) 승인 코멘트 또는 (필수) 반려 사유를 입력하세요"
                     disabled={busy !== null}
