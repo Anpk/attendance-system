@@ -118,6 +118,8 @@ export default function ReportTab({
     workDate: string;
     checkInAt: string | null;
     checkOutAt: string | null;
+    targetUserId?: number;
+    targetUserName?: string;
   } | null>(null);
   const [toast, setToast] = useState<string>('');
   const reportSeqRef = useRef(0);
@@ -797,7 +799,11 @@ export default function ReportTab({
                 submitting={reportLoading}
                 onClose={() => setSelectedEmployee(null)}
                 onRequestCorrection={(it) => {
-                  setSelectedAttendance(it);
+                  setSelectedAttendance({
+                    ...it,
+                    targetUserId: selectedEmployee?.userId,
+                    targetUserName: selectedEmployee?.username,
+                  });
                 }}
               />
             </div>
@@ -820,6 +826,8 @@ export default function ReportTab({
           }}
           baseUrl={baseUrl}
           attendanceId={selectedAttendance.attendanceId}
+          targetUserId={selectedAttendance.targetUserId}
+          targetUserName={selectedAttendance.targetUserName}
           workDate={selectedAttendance.workDate}
           initialCheckInAt={selectedAttendance.checkInAt}
           initialCheckOutAt={selectedAttendance.checkOutAt}

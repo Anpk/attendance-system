@@ -346,6 +346,14 @@ function CorrectionDetailPageInner() {
   const inFlightKeyRef = useRef<string | null>(null);
 
   const requestId = Number(params.id);
+  const preservedListFilters = useMemo(() => {
+    const q = new URLSearchParams();
+    for (const key of ['site', 'user', 'from', 'to']) {
+      const v = searchParams.get(key);
+      if (v) q.set(key, v);
+    }
+    return q;
+  }, [searchParams]);
 
   // ✅ 비승인자가 approvable로 접근한 경우 URL도 my로 정규화(UX 혼란 방지)
   useEffect(() => {
@@ -354,15 +362,18 @@ function CorrectionDetailPageInner() {
 
     if (desiredTab === 'approvable' && !isApprover) {
       // 현재 URL에 scope=approvable 또는 tab=approvable이 남아있으면 제거
-      router.replace(`/corrections/${requestId}?tab=my`);
+      const next = new URLSearchParams(preservedListFilters);
+      next.set('tab', 'my');
+      router.replace(`/corrections/${requestId}?${next.toString()}`);
     }
-  }, [user, requestId, desiredTab, isApprover, router]);
+  }, [user, requestId, desiredTab, isApprover, router, preservedListFilters]);
 
   // ✅ 목록 복귀 시 탭 유지(최소 UX)
-  const backToListUrl =
-    effectiveTab === 'approvable'
-      ? '/corrections?tab=approvable'
-      : '/corrections?tab=my';
+  const backToListUrl = useMemo(() => {
+    const q = new URLSearchParams(preservedListFilters);
+    q.set('tab', effectiveTab);
+    return `/corrections?${q.toString()}`;
+  }, [effectiveTab, preservedListFilters]);
 
   const [data, setData] = useState<CorrectionRequestDetail | null>(null);
   const [loading, setLoading] = useState(false);

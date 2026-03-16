@@ -835,6 +835,7 @@ function AttendanceReportPageInner() {
             onClose={() => setSelectedAttendance(null)}
             baseUrl={baseUrl}
             attendanceId={selectedAttendance.attendanceId}
+            targetUserId={user.userId}
             workDate={selectedAttendance.workDate}
             initialCheckInAt={selectedAttendance.checkInAt}
             initialCheckOutAt={selectedAttendance.checkOutAt}

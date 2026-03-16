@@ -8,6 +8,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import AppHeader from '@/app/_components/AppHeader';
 import type { CorrectionRequestListItem } from '@/app/_components/CorrectionRequestDetailModal';
 import { apiFetch } from '@/lib/api/client';
+import { ApiError } from '@/lib/api/types';
 
 import { toUserMessage } from '@/lib/api/error-messages';
 
@@ -132,22 +133,78 @@ function CorrectionsPageInner() {
   const [sites, setSites] = useState<SiteOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
 
-  const [sitePick, setSitePick] = useState<string>('');
-  const [userPick, setUserPick] = useState<string>('');
-  const [fromPick, setFromPick] = useState<string>(''); // YYYY-MM-DD
-  const [toPick, setToPick] = useState<string>(''); // YYYY-MM-DD
+  const [sitePick, setSitePick] = useState<string>(
+    () => searchParams.get('site') ?? ''
+  );
+  const [userPick, setUserPick] = useState<string>(
+    () => searchParams.get('user') ?? ''
+  );
+  const [fromPick, setFromPick] = useState<string>(
+    () => searchParams.get('from') ?? ''
+  ); // YYYY-MM-DD
+  const [toPick, setToPick] = useState<string>(
+    () => searchParams.get('to') ?? ''
+  ); // YYYY-MM-DD
 
-  const [siteApplied, setSiteApplied] = useState<string>('');
-  const [userApplied, setUserApplied] = useState<string>('');
-  const [fromApplied, setFromApplied] = useState<string>('');
-  const [toApplied, setToApplied] = useState<string>('');
+  const [siteApplied, setSiteApplied] = useState<string>(
+    () => searchParams.get('site') ?? ''
+  );
+  const [userApplied, setUserApplied] = useState<string>(
+    () => searchParams.get('user') ?? ''
+  );
+  const [fromApplied, setFromApplied] = useState<string>(
+    () => searchParams.get('from') ?? ''
+  );
+  const [toApplied, setToApplied] = useState<string>(
+    () => searchParams.get('to') ?? ''
+  );
+
+  const buildListUrl = useCallback(
+    (
+      nextTab: 'my' | 'approvable',
+      nextFilters?: { site?: string; user?: string; from?: string; to?: string }
+    ) => {
+      const q = new URLSearchParams();
+      q.set('tab', nextTab);
+
+      const site = nextFilters?.site ?? '';
+      const userId = nextFilters?.user ?? '';
+      const from = nextFilters?.from ?? '';
+      const to = nextFilters?.to ?? '';
+
+      if (site) q.set('site', site);
+      if (userId) q.set('user', userId);
+      if (from) q.set('from', from);
+      if (to) q.set('to', to);
+
+      return `/corrections?${q.toString()}`;
+    },
+    []
+  );
+
+  const toListErrorMessage = useCallback(
+    (e: unknown) => {
+      if (e instanceof ApiError) {
+        if (e.httpStatus === 403 || e.code === 'FORBIDDEN') {
+          return effectiveTab === 'approvable'
+            ? '승인 가능한 목록 조회 권한이 없습니다.'
+            : '정정 요청 목록 조회 권한이 없습니다.';
+        }
+        if (e.httpStatus >= 500) {
+          return '서버 오류로 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        }
+      }
+      return `목록 조회에 실패했습니다. ${toUserMessage(e)}`;
+    },
+    [effectiveTab]
+  );
 
   const fetchList = useCallback(async () => {
     if (!user) return;
 
     // ✅ URL이 approvable로 들어와도(직접 입력/즐겨찾기 등) 화면/호출 모두 my로 통일
     if (tab === 'approvable' && !isApprover) {
-      router.replace('/corrections?tab=my');
+      router.replace(buildListUrl('my'));
     }
 
     setLoading(true);
@@ -165,11 +222,20 @@ function CorrectionsPageInner() {
       setItems(data.items ?? []);
     } catch (e) {
       setItems([]);
-      setError(toUserMessage(e));
+      setError(toListErrorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [user, baseUrl, tab, isApprover, router, effectiveTab]);
+  }, [
+    user,
+    baseUrl,
+    tab,
+    isApprover,
+    router,
+    effectiveTab,
+    toListErrorMessage,
+    buildListUrl,
+  ]);
 
   useEffect(() => {
     if (!user) return;
@@ -200,9 +266,9 @@ function CorrectionsPageInner() {
 
     // ✅ 비승인자가 URL로 approvable 탭에 직접 접근하면 my 탭으로 되돌림
     if (!isApprover && tab === 'approvable') {
-      router.replace('/corrections?tab=my');
+      router.replace(buildListUrl('my'));
     }
-  }, [user, isApprover, tab, router]);
+  }, [user, isApprover, tab, router, buildListUrl]);
 
   const employeeByUserId = useMemo(() => {
     const m = new Map<number, EmployeeOption>();
@@ -226,10 +292,39 @@ function CorrectionsPageInner() {
   const showFilterBar =
     effectiveTab === 'approvable' || (effectiveTab === 'my' && isApprover);
 
+  useEffect(() => {
+    if (!showFilterBar) {
+      setSitePick('');
+      setUserPick('');
+      setFromPick('');
+      setToPick('');
+      setSiteApplied('');
+      setUserApplied('');
+      setFromApplied('');
+      setToApplied('');
+      return;
+    }
+
+    const qSite = searchParams.get('site') ?? '';
+    const qUser = searchParams.get('user') ?? '';
+    const qFrom = searchParams.get('from') ?? '';
+    const qTo = searchParams.get('to') ?? '';
+
+    setSitePick(qSite);
+    setUserPick(qUser);
+    setFromPick(qFrom);
+    setToPick(qTo);
+
+    setSiteApplied(qSite);
+    setUserApplied(qUser);
+    setFromApplied(qFrom);
+    setToApplied(qTo);
+  }, [showFilterBar, searchParams]);
+
   function switchTab(next: 'my' | 'approvable') {
     // ✅ 비승인자는 approvable로 전환 불가(표시/접근 일관성)
     if (next === 'approvable' && !isApprover) {
-      router.replace('/corrections?tab=my');
+      router.replace(buildListUrl('my'));
       return;
     }
 
@@ -243,8 +338,7 @@ function CorrectionsPageInner() {
     setToPick('');
     setFromApplied('');
     setToApplied('');
-    const q = next === 'approvable' ? '?tab=approvable' : '?tab=my';
-    router.replace(`/corrections${q}`);
+    router.replace(buildListUrl(next));
   }
 
   async function applyFilters() {
@@ -252,6 +346,14 @@ function CorrectionsPageInner() {
     setUserApplied(userPick);
     setFromApplied(fromPick);
     setToApplied(toPick);
+    router.replace(
+      buildListUrl(effectiveTab, {
+        site: sitePick,
+        user: userPick,
+        from: fromPick,
+        to: toPick,
+      })
+    );
     await fetchList();
   }
 
@@ -270,6 +372,7 @@ function CorrectionsPageInner() {
     setFromApplied('');
     setToApplied('');
 
+    router.replace(buildListUrl(effectiveTab));
     await fetchList();
   }
 
@@ -340,6 +443,23 @@ function CorrectionsPageInner() {
     employeeByUserId,
   ]);
 
+  const buildDetailHref = useCallback(
+    (requestId: number) => {
+      const q = new URLSearchParams();
+      q.set('tab', effectiveTab);
+
+      if (showFilterBar) {
+        if (siteApplied) q.set('site', siteApplied);
+        if (userApplied) q.set('user', userApplied);
+        if (fromApplied) q.set('from', fromApplied);
+        if (toApplied) q.set('to', toApplied);
+      }
+
+      return `/corrections/${requestId}?${q.toString()}`;
+    },
+    [effectiveTab, showFilterBar, siteApplied, userApplied, fromApplied, toApplied]
+  );
+
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <AppHeader />
@@ -354,7 +474,12 @@ function CorrectionsPageInner() {
             disabled={loading}
             aria-busy={loading}
           >
-            {loading ? '갱신 중...' : '새로고침'}
+            <span className="inline-flex items-center gap-2">
+              {loading ? (
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent" />
+              ) : null}
+              {loading ? '갱신 중...' : '새로고침'}
+            </span>
           </button>
         </div>
 
@@ -462,7 +587,12 @@ function CorrectionsPageInner() {
                 disabled={loading}
                 aria-busy={loading}
               >
-                조회
+                <span className="inline-flex items-center gap-2">
+                  {loading ? (
+                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent" />
+                  ) : null}
+                  조회
+                </span>
               </button>
 
               <button
@@ -512,16 +642,41 @@ function CorrectionsPageInner() {
         )}
 
         {loading && (
-          <p
-            className="mt-4 text-sm text-gray-600 dark:text-gray-300"
+          <section
+            className="mt-4 rounded border border-gray-300 bg-white p-4 dark:border-gray-600 dark:bg-gray-900"
             aria-busy="true"
           >
-            목록 불러오는 중...
-          </p>
+            <div className="mb-3 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-500 border-r-transparent dark:border-gray-300 dark:border-r-transparent" />
+              목록 불러오는 중...
+            </div>
+            <ul className="space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <li
+                  key={`correction-skeleton-${i}`}
+                  className="animate-pulse rounded border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-950"
+                >
+                  <div className="h-4 w-28 rounded bg-gray-300 dark:bg-gray-700" />
+                  <div className="mt-2 h-3 w-full rounded bg-gray-200 dark:bg-gray-800" />
+                  <div className="mt-2 h-3 w-3/4 rounded bg-gray-200 dark:bg-gray-800" />
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {!loading && error && (
-          <p className="mt-4 text-sm text-red-600">❌ {error}</p>
+          <div className="mt-4 rounded border border-red-300 bg-red-50 px-3 py-3 text-sm text-red-800 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200">
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={fetchList}
+              className="mt-2 rounded border border-red-400 bg-white px-3 py-1.5 text-xs text-red-900 hover:bg-red-100 dark:border-red-500 dark:bg-gray-900 dark:text-red-200 dark:hover:bg-red-900/30"
+              disabled={loading}
+            >
+              다시 시도
+            </button>
+          </div>
         )}
 
         {!loading && !error && displayedItems.length === 0 && (
@@ -538,15 +693,21 @@ function CorrectionsPageInner() {
               {displayedItems.map((it) => {
                 const requestedAt = getOptionalStringField(it, 'requestedAt');
                 const workDate = getOptionalStringField(it, 'workDate');
+                const targetUserId = getTargetUserId(it);
+                const targetEmployee = employeeByUserId.get(targetUserId);
+                const targetEmployeeLabel = targetEmployee?.username
+                  ? `${targetEmployee.username} #${targetUserId}`
+                  : `#${targetUserId}`;
+                const summaryParts = [
+                  `대상 직원 ${targetEmployeeLabel}`,
+                  `대상 날짜 ${workDate ?? '-'}`,
+                  `요청 시각 ${fmtYmdHm(requestedAt)}`,
+                ];
 
                 return (
                   <li key={it.requestId} className="px-4 py-3 text-sm">
                     <Link
-                      href={
-                        effectiveTab === 'approvable'
-                          ? `/corrections/${it.requestId}?tab=approvable`
-                          : `/corrections/${it.requestId}?tab=my`
-                      }
+                      href={buildDetailHref(it.requestId)}
                       className="block w-full rounded hover:bg-gray-100 dark:hover:bg-gray-800"
                     >
                       <div className="flex items-center justify-between">
@@ -555,9 +716,10 @@ function CorrectionsPageInner() {
                             <span className="font-medium">
                               요청 #{it.requestId}
                             </span>
-                            <span className="text-xs text-gray-500 dark:text-gray-300">
-                              {fmtYmdHm(requestedAt)}
-                            </span>
+                          </div>
+
+                          <div className="text-xs text-gray-600 dark:text-gray-300">
+                            {summaryParts.join(' · ')}
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2 text-gray-600 dark:text-gray-300">
@@ -566,12 +728,6 @@ function CorrectionsPageInner() {
                             >
                               {statusLabel(String(it.status))}
                             </span>
-
-                            {workDate ? (
-                              <span className="text-xs text-gray-600 dark:text-gray-300">
-                                대상 날짜 {workDate}
-                              </span>
-                            ) : null}
 
                             {effectiveTab === 'approvable' ? (
                               <span className="text-xs text-gray-600 dark:text-gray-300">

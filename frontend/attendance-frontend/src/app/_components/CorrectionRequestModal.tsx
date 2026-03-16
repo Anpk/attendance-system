@@ -13,6 +13,8 @@ type Props = {
   onClose: () => void;
   baseUrl: string;
   attendanceId: number;
+  targetUserId?: number | null;
+  targetUserName?: string | null;
   // YYYY-MM-DD (목록 행의 workDate를 전달받아 날짜 고정)
   workDate: string;
   initialCheckInAt: string | null;
@@ -43,6 +45,8 @@ export default function CorrectionRequestModal({
   onClose,
   baseUrl,
   attendanceId,
+  targetUserId,
+  targetUserName,
   workDate,
   initialCheckInAt,
   initialCheckOutAt,
@@ -144,6 +148,15 @@ export default function CorrectionRequestModal({
     return '';
   }, [type, checkInLocal, checkOutLocal, reason, isTimeOrderValid]);
 
+  const targetLabel = useMemo(() => {
+    const idText =
+      typeof targetUserId === 'number' && Number.isFinite(targetUserId)
+        ? `#${targetUserId}`
+        : '';
+    const nameText = targetUserName?.trim() ? targetUserName.trim() : '';
+    return `${nameText}${nameText && idText ? ' ' : ''}${idText}`.trim();
+  }, [targetUserId, targetUserName]);
+
   if (!open) return null;
 
   const submit = async () => {
@@ -186,8 +199,9 @@ export default function CorrectionRequestModal({
 
       // ✅ 중복 신청은 운영에서 제일 많이 보는 케이스라 더 명확히
       if (e instanceof ApiError && e.code === 'PENDING_REQUEST_EXISTS') {
+        const targetHint = targetLabel ? `대상 ${targetLabel} · ` : '';
         setMessage(
-          '이미 승인 대기 중인 정정 요청이 있습니다. 중복 신청은 불가능합니다.'
+          `이미 승인 대기 중인 정정 요청이 있습니다. ${targetHint}${workDate} 건을 확인해 주세요.`
         );
       }
     } finally {
@@ -207,7 +221,9 @@ export default function CorrectionRequestModal({
           <div>
             <h2 className="text-lg font-semibold">정정 요청</h2>
             <p className="text-xs text-gray-500 dark:text-gray-300">
-              대상 날짜: {workDate}
+              {targetLabel
+                ? `대상: ${targetLabel} · ${workDate}`
+                : `대상 날짜: ${workDate}`}
             </p>
           </div>
           <button
