@@ -77,6 +77,10 @@ function LoginPageInner() {
     const reason = searchParams.get('reason');
     if (reason === 'expired') {
       setMessage('세션이 만료되었습니다. 다시 로그인해 주세요.');
+      return;
+    }
+    if (reason === 'inactive') {
+      setMessage('비활성 계정입니다. 관리자에게 문의해 주세요.');
     }
   }, [searchParams]);
 
