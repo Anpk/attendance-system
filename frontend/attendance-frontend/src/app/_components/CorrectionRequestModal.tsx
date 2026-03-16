@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
+import { ApiError } from '@/lib/api/types';
 
 type CorrectionType = 'CHECK_IN' | 'CHECK_OUT' | 'BOTH';
 
@@ -53,6 +54,7 @@ export default function CorrectionRequestModal({
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [messageTone, setMessageTone] = useState<'info' | 'error'>('info');
 
   // 모달 열릴 때 초기값 세팅
   useEffect(() => {
@@ -62,6 +64,7 @@ export default function CorrectionRequestModal({
     setCheckOutLocal(isoToLocalTime(initialCheckOutAt));
     setReason('');
     setMessage('');
+    setMessageTone('info');
     setLoading(false);
   }, [open, initialCheckInAt, initialCheckOutAt]);
 
@@ -157,6 +160,7 @@ export default function CorrectionRequestModal({
 
     setLoading(true);
     setMessage('');
+    setMessageTone('info');
     try {
       await apiFetch(
         `${baseUrl}/api/attendance/${attendanceId}/correction-requests`,
@@ -176,7 +180,16 @@ export default function CorrectionRequestModal({
       onClose();
       onCreated();
     } catch (e) {
-      setMessage(toUserMessage(e));
+      const msg = toUserMessage(e);
+      setMessage(msg);
+      setMessageTone('error');
+
+      // ✅ 중복 신청은 운영에서 제일 많이 보는 케이스라 더 명확히
+      if (e instanceof ApiError && e.code === 'PENDING_REQUEST_EXISTS') {
+        setMessage(
+          '이미 승인 대기 중인 정정 요청이 있습니다. 중복 신청은 불가능합니다.'
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -276,11 +289,17 @@ export default function CorrectionRequestModal({
           )}
         </div>
 
-        {message && (
-          <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm dark:border-red-900 dark:bg-red-900/30 dark:text-red-200">
-            ❌ {message}
-          </div>
-        )}
+        {message ? (
+          <p
+            className={
+              messageTone === 'error'
+                ? 'mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200'
+                : 'mt-3 rounded border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-800 dark:border-gray-600 dark:bg-gray-950 dark:text-gray-200'
+            }
+          >
+            {message}
+          </p>
+        ) : null}
 
         <div className="flex gap-2">
           <button

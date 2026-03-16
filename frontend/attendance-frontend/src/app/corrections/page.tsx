@@ -134,9 +134,13 @@ function CorrectionsPageInner() {
 
   const [sitePick, setSitePick] = useState<string>('');
   const [userPick, setUserPick] = useState<string>('');
+  const [fromPick, setFromPick] = useState<string>(''); // YYYY-MM-DD
+  const [toPick, setToPick] = useState<string>(''); // YYYY-MM-DD
 
   const [siteApplied, setSiteApplied] = useState<string>('');
   const [userApplied, setUserApplied] = useState<string>('');
+  const [fromApplied, setFromApplied] = useState<string>('');
+  const [toApplied, setToApplied] = useState<string>('');
 
   const fetchList = useCallback(async () => {
     if (!user) return;
@@ -235,6 +239,10 @@ function CorrectionsPageInner() {
     setUserPick('');
     setSiteApplied('');
     setUserApplied('');
+    setFromPick('');
+    setToPick('');
+    setFromApplied('');
+    setToApplied('');
     const q = next === 'approvable' ? '?tab=approvable' : '?tab=my';
     router.replace(`/corrections${q}`);
   }
@@ -242,6 +250,26 @@ function CorrectionsPageInner() {
   async function applyFilters() {
     setSiteApplied(sitePick);
     setUserApplied(userPick);
+    setFromApplied(fromPick);
+    setToApplied(toPick);
+    await fetchList();
+  }
+
+  const hasAppliedFilters = useMemo(() => {
+    return !!(siteApplied || userApplied || fromApplied || toApplied);
+  }, [siteApplied, userApplied, fromApplied, toApplied]);
+
+  async function resetFilters() {
+    setSitePick('');
+    setUserPick('');
+    setFromPick('');
+    setToPick('');
+
+    setSiteApplied('');
+    setUserApplied('');
+    setFromApplied('');
+    setToApplied('');
+
     await fetchList();
   }
 
@@ -269,6 +297,25 @@ function CorrectionsPageInner() {
       if (uid) {
         filtered = filtered.filter((it) => getTargetUserId(it) === uid);
       }
+
+      // ✅ 기간 필터(요청 시각 기준, 운영용)
+      const fromMs = fromApplied
+        ? new Date(`${fromApplied}T00:00:00+09:00`).getTime()
+        : null;
+      const toMs = toApplied
+        ? new Date(`${toApplied}T23:59:59+09:00`).getTime()
+        : null;
+      if (fromMs || toMs) {
+        filtered = filtered.filter((it) => {
+          const requestedAt = getOptionalStringField(it, 'requestedAt');
+          if (!requestedAt) return true;
+          const ms = new Date(requestedAt).getTime();
+          if (!Number.isFinite(ms)) return true;
+          if (fromMs && ms < fromMs) return false;
+          if (toMs && ms > toMs) return false;
+          return true;
+        });
+      }
     }
 
     // requestedAt이 없을 수 있으므로 requestId로 fallback(내림차순)
@@ -288,6 +335,8 @@ function CorrectionsPageInner() {
     showFilterBar,
     siteApplied,
     userApplied,
+    fromApplied,
+    toApplied,
     employeeByUserId,
   ]);
 
@@ -340,7 +389,7 @@ function CorrectionsPageInner() {
 
         {showFilterBar && (
           <section className="mt-3 rounded border border-gray-300 bg-white p-3 text-sm dark:border-gray-600 dark:bg-gray-900">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <label className="text-xs text-gray-800 dark:text-gray-200">
                 <span className="block mb-1">근무지</span>
                 <select
@@ -378,21 +427,59 @@ function CorrectionsPageInner() {
                 </select>
               </label>
 
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={applyFilters}
-                  className="w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+              <label className="text-xs text-gray-800 dark:text-gray-200">
+                <span className="block mb-1">기간 From</span>
+                <input
+                  type="date"
+                  className="w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100"
+                  value={fromPick}
+                  onChange={(e) => setFromPick(e.target.value)}
                   disabled={loading}
-                  aria-busy={loading}
-                >
-                  조회
-                </button>
-              </div>
+                />
+              </label>
+
+              <label className="text-xs text-gray-800 dark:text-gray-200">
+                <span className="block mb-1">기간 To</span>
+                <input
+                  type="date"
+                  className="w-full rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-500 dark:bg-gray-950 dark:text-gray-100"
+                  value={toPick}
+                  onChange={(e) => setToPick(e.target.value)}
+                  disabled={loading}
+                />
+              </label>
+
+              {/* action controls moved below */}
             </div>
             <p className="mt-2 text-xs text-gray-700 dark:text-gray-200">
               ※ 관리자/매니저만 근무지/직원 필터를 사용할 수 있습니다.
             </p>
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={applyFilters}
+                className="min-w-[92px] whitespace-nowrap rounded border border-gray-400 bg-white px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+                disabled={loading}
+                aria-busy={loading}
+              >
+                조회
+              </button>
+
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="min-w-[92px] whitespace-nowrap rounded border border-gray-400 bg-white px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
+                disabled={loading}
+              >
+                초기화
+              </button>
+
+              {hasAppliedFilters && (
+                <span className="inline-flex items-center rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-100">
+                  적용됨
+                </span>
+              )}
+            </div>
           </section>
         )}
 
