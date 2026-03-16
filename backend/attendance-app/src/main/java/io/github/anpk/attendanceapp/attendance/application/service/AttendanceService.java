@@ -1,7 +1,9 @@
 package io.github.anpk.attendanceapp.attendance.application.service;
 
 import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
+import io.github.anpk.attendanceapp.attendance.domain.model.AttendanceBreak;
 import io.github.anpk.attendanceapp.attendance.interfaces.dto.*;
+import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceBreakRepository;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequest;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestStatus;
 import io.github.anpk.attendanceapp.correction.infrastructure.repository.CorrectionRequestRepository;
@@ -20,10 +22,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.*;
 import java.util.List;
-import java.util.regex.Pattern;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -42,17 +45,20 @@ public class AttendanceService {
     );
 
     private final AttendanceRepository attendanceRepository;
+    private final AttendanceBreakRepository attendanceBreakRepository;
     private final CorrectionRequestRepository correctionRequestRepository;
     private final EmployeeRepository employeeRepository;
     private final SiteRepository siteRepository;
 
     public AttendanceService(
             AttendanceRepository attendanceRepository,
+            AttendanceBreakRepository attendanceBreakRepository,
             CorrectionRequestRepository correctionRequestRepository,
             EmployeeRepository employeeRepository,
             SiteRepository siteRepository
     ) {
         this.attendanceRepository = attendanceRepository;
+        this.attendanceBreakRepository = attendanceBreakRepository;
         this.correctionRequestRepository = correctionRequestRepository;
         this.employeeRepository = employeeRepository;
         this.siteRepository = siteRepository;
@@ -86,7 +92,7 @@ public class AttendanceService {
         );
 
         var saved = attendanceRepository.save(attendance);
-        return AttendanceActionResponse.from(saved);
+        return toAttendanceActionResponse(saved, false);
     }
 
     @Transactional
@@ -99,13 +105,55 @@ public class AttendanceService {
         if (attendance.getCheckOutTime() != null) {
             throw new BusinessException(ErrorCode.ALREADY_CHECKED_OUT, "이미 퇴근 처리되었습니다.");
         }
+        if (hasActiveBreak(attendance.getId())) {
+            throw new BusinessException(ErrorCode.BREAK_IN_PROGRESS, "휴게 종료 후 퇴근할 수 있습니다.");
+        }
 
         validateCheckOutPhoto(photo);
         String checkOutPhotoPath = savePhoto(photo);
         attendance.checkOut(LocalDateTime.now(KST), checkOutPhotoPath);
 
         var saved = attendanceRepository.save(attendance);
-        return AttendanceActionResponse.from(saved);
+        return toAttendanceActionResponse(saved, false);
+    }
+
+    @Transactional
+    public AttendanceActionResponse breakStart(Long userId) {
+        LocalDate today = LocalDate.now(KST);
+        Attendance attendance = attendanceRepository.findByUserIdAndWorkDate(userId, today)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_CHECKED_IN, "출근 기록이 없어 휴게를 시작할 수 없습니다."));
+
+        if (attendance.getCheckOutTime() != null) {
+            throw new BusinessException(ErrorCode.ALREADY_CHECKED_OUT, "이미 퇴근 처리되었습니다.");
+        }
+        if (hasActiveBreak(attendance.getId())) {
+            throw new BusinessException(ErrorCode.BREAK_ALREADY_STARTED, "이미 휴게 중입니다.");
+        }
+
+        AttendanceBreak started = AttendanceBreak.start(attendance, LocalDateTime.now(KST));
+        attendanceBreakRepository.save(started);
+
+        return toAttendanceActionResponse(attendance, false);
+    }
+
+    @Transactional
+    public AttendanceActionResponse breakEnd(Long userId) {
+        LocalDate today = LocalDate.now(KST);
+        Attendance attendance = attendanceRepository.findByUserIdAndWorkDate(userId, today)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_CHECKED_IN, "출근 기록이 없어 휴게를 종료할 수 없습니다."));
+
+        if (attendance.getCheckOutTime() != null) {
+            throw new BusinessException(ErrorCode.ALREADY_CHECKED_OUT, "이미 퇴근 처리되었습니다.");
+        }
+
+        AttendanceBreak inProgress = attendanceBreakRepository
+                .findFirstByAttendance_IdAndBreakEndTimeIsNullOrderByBreakStartTimeDesc(attendance.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.BREAK_NOT_STARTED, "진행 중인 휴게가 없습니다."));
+
+        inProgress.end(LocalDateTime.now(KST));
+        attendanceBreakRepository.save(inProgress);
+
+        return toAttendanceActionResponse(attendance, false);
     }
 
     private static void validateCheckOutPhoto(MultipartFile photo) {
@@ -272,18 +320,20 @@ public class AttendanceService {
 
         List<Attendance> items = attendanceRepository
                 .findAllByUserIdAndWorkDateBetweenOrderByWorkDateAsc(userId, fromDate, toDate);
+        Map<Long, Long> breakMinutesByAttendanceId = loadBreakMinutesByAttendanceIds(items);
 
         long totalWorkMinutes = 0L;
         List<AttendanceReportItemResponse> mapped = items.stream()
                 .map(a -> {
                     FinalSnapshot snap = toFinalSnapshot(a);
+                    long breakMinutes = breakMinutesByAttendanceId.getOrDefault(a.getId(), 0L);
 
                     Long workMinutes = null;
                     if (snap.finalCheckInAt() != null && snap.finalCheckOutAt() != null) {
                         long mins = Duration.between(snap.finalCheckInAt(), snap.finalCheckOutAt()).toMinutes();
                         // 비정상(음수) 방어: 데이터 손상/예외 케이스가 있더라도 리포트가 죽지 않도록 null 처리
                         if (mins >= 0) {
-                            workMinutes = mins;
+                            workMinutes = Math.max(mins - breakMinutes, 0L);
                         }
                     }
 
@@ -292,6 +342,7 @@ public class AttendanceService {
                             a.getWorkDate().toString(),
                             snap.finalCheckInAt(),
                             snap.finalCheckOutAt(),
+                            breakMinutes,
                             workMinutes,
                             snap.isCorrected()
                     );
@@ -365,15 +416,17 @@ public class AttendanceService {
         var mappedEmployees = employees.stream().map(emp -> {
             var attendances = attendanceRepository
                     .findAllByUserIdAndWorkDateBetweenOrderByWorkDateAsc(emp.getUserId(), fromDate, toDate);
+            Map<Long, Long> breakMinutesByAttendanceId = loadBreakMinutesByAttendanceIds(attendances);
 
             var items = attendances.stream().map(a -> {
                 FinalSnapshot snap = toFinalSnapshot(a);
+                long breakMinutes = breakMinutesByAttendanceId.getOrDefault(a.getId(), 0L);
 
                 Long workMinutes = null;
                 if (snap.finalCheckInAt() != null && snap.finalCheckOutAt() != null) {
                     long mins = Duration.between(snap.finalCheckInAt(), snap.finalCheckOutAt()).toMinutes();
                     if (mins >= 0) {
-                        workMinutes = mins;
+                        workMinutes = Math.max(mins - breakMinutes, 0L);
                     }
                 }
 
@@ -382,6 +435,7 @@ public class AttendanceService {
                         a.getWorkDate().toString(),
                         snap.finalCheckInAt(),
                         snap.finalCheckOutAt(),
+                        breakMinutes,
                         workMinutes,
                         snap.isCorrected()
                 );
@@ -423,13 +477,13 @@ public class AttendanceService {
      * today 응답도 Final 합성 규칙 적용 (승인된 최신 정정 1건)
      */
     @Transactional(readOnly = true)
-    public FinalSnapshot getTodayFinalSnapshot(Long userId) {
+    public AttendanceActionResponse getTodayAction(Long userId) {
         LocalDate today = LocalDate.now(KST);
         Attendance a = attendanceRepository.findByUserIdAndWorkDate(userId, today).orElse(null);
         if (a == null) {
-            return FinalSnapshot.empty(today);
+            return AttendanceActionResponse.empty(today);
         }
-        return toFinalSnapshot(a);
+        return toAttendanceActionResponse(a, true);
     }
 
     private YearMonth parseYearMonthOrThrow(String month) {
@@ -451,6 +505,83 @@ public class AttendanceService {
             );
         }
         return YearMonth.parse(month);
+    }
+
+    private boolean hasActiveBreak(Long attendanceId) {
+        return attendanceBreakRepository
+                .findFirstByAttendance_IdAndBreakEndTimeIsNullOrderByBreakStartTimeDesc(attendanceId)
+                .isPresent();
+    }
+
+    private Map<Long, Long> loadBreakMinutesByAttendanceIds(List<Attendance> attendances) {
+        if (attendances == null || attendances.isEmpty()) return Map.of();
+
+        List<Long> attendanceIds = attendances.stream()
+                .map(Attendance::getId)
+                .toList();
+        if (attendanceIds.isEmpty()) return Map.of();
+
+        return attendanceBreakRepository.findAllByAttendance_IdIn(attendanceIds).stream()
+                .collect(Collectors.groupingBy(
+                        b -> b.getAttendance().getId(),
+                        Collectors.summingLong(AttendanceBreak::durationMinutesOrZero)
+                ));
+    }
+
+    private AttendanceActionResponse toAttendanceActionResponse(Attendance attendance, boolean applyFinalSnapshot) {
+        if (attendance == null) {
+            return AttendanceActionResponse.empty(LocalDate.now(KST));
+        }
+
+        BreakSummary breakSummary = getBreakSummary(attendance.getId());
+        OffsetDateTime in;
+        OffsetDateTime out;
+        boolean corrected;
+        if (applyFinalSnapshot) {
+            FinalSnapshot finalSnapshot = toFinalSnapshot(attendance);
+            in = finalSnapshot.finalCheckInAt();
+            out = finalSnapshot.finalCheckOutAt();
+            corrected = finalSnapshot.isCorrected();
+        } else {
+            in = attendance.getCheckInTime() == null
+                    ? null
+                    : attendance.getCheckInTime().atZone(KST).toOffsetDateTime();
+            out = attendance.getCheckOutTime() == null
+                    ? null
+                    : attendance.getCheckOutTime().atZone(KST).toOffsetDateTime();
+            corrected = false;
+        }
+
+        return new AttendanceActionResponse(
+                attendance.getId(),
+                attendance.getWorkDate().toString(),
+                in,
+                out,
+                corrected,
+                breakSummary.inProgress(),
+                breakSummary.totalBreakMinutes(),
+                breakSummary.activeBreakStartedAt()
+        );
+    }
+
+    private BreakSummary getBreakSummary(Long attendanceId) {
+        List<AttendanceBreak> breaks = attendanceBreakRepository
+                .findAllByAttendance_IdOrderByBreakStartTimeAsc(attendanceId);
+
+        long totalBreakMinutes = 0L;
+        OffsetDateTime activeBreakStartedAt = null;
+        for (AttendanceBreak b : breaks) {
+            totalBreakMinutes += b.durationMinutesOrZero();
+            if (b.isInProgress() && b.getBreakStartTime() != null) {
+                activeBreakStartedAt = b.getBreakStartTime().atZone(KST).toOffsetDateTime();
+            }
+        }
+
+        return new BreakSummary(
+                activeBreakStartedAt != null,
+                totalBreakMinutes,
+                activeBreakStartedAt
+        );
     }
 
     /**
@@ -519,6 +650,12 @@ public class AttendanceService {
      * 조회 응답 조립에 사용하는 내부 스냅샷
      * - Attendance 원본 + 승인된 최신 정정 1건을 합성한 최종(Final) 값
      */
+
+    private record BreakSummary(
+            boolean inProgress,
+            long totalBreakMinutes,
+            OffsetDateTime activeBreakStartedAt
+    ) {}
 
     public record FinalSnapshot(
             Long attendanceId,

@@ -15,6 +15,9 @@ public final class ErrorCodeHttpMapper {
         MAP.put(ErrorCode.ALREADY_CHECKED_IN, HttpStatus.CONFLICT);
         MAP.put(ErrorCode.NOT_CHECKED_IN, HttpStatus.CONFLICT);
         MAP.put(ErrorCode.ALREADY_CHECKED_OUT, HttpStatus.CONFLICT);
+        MAP.put(ErrorCode.BREAK_ALREADY_STARTED, HttpStatus.CONFLICT);
+        MAP.put(ErrorCode.BREAK_NOT_STARTED, HttpStatus.CONFLICT);
+        MAP.put(ErrorCode.BREAK_IN_PROGRESS, HttpStatus.CONFLICT);
         MAP.put(ErrorCode.OPEN_ATTENDANCE_EXISTS, HttpStatus.CONFLICT);
         MAP.put(ErrorCode.EMPLOYEE_INACTIVE, HttpStatus.FORBIDDEN);
 

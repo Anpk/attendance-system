@@ -35,6 +35,12 @@ export function toUserMessage(err: unknown): string {
       return '출근 기록이 없어 퇴근할 수 없습니다.';
     case 'ALREADY_CHECKED_OUT':
       return '이미 퇴근 처리되었습니다.';
+    case 'BREAK_ALREADY_STARTED':
+      return '이미 휴게 중입니다.';
+    case 'BREAK_NOT_STARTED':
+      return '진행 중인 휴게가 없습니다.';
+    case 'BREAK_IN_PROGRESS':
+      return '휴게 종료 후 퇴근할 수 있습니다.';
 
     default:
       return err.message || '서버 오류가 발생했습니다.';
