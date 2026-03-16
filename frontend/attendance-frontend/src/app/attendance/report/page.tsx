@@ -2,6 +2,7 @@
 
 import AppHeader from '@/app/_components/AppHeader';
 import CorrectionRequestModal from '@/app/_components/CorrectionRequestModal';
+import FlashMessage from '@/app/_components/FlashMessage';
 import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
 import { toUserMessage } from '@/lib/api/error-messages';
 import { fetchAttendanceReport } from '@/lib/api/attendance-report';
@@ -393,11 +394,7 @@ function AttendanceReportPageInner() {
           </div>
         )}
 
-        {message && (
-          <div className="mb-4 rounded border bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
-            {message}
-          </div>
-        )}
+        <FlashMessage message={message} />
 
         {!forbidden && toast && (
           <div className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-900/30 dark:text-green-200">

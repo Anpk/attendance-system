@@ -1,7 +1,6 @@
 'use client';
 
 import type { AdminSiteResponse, EmployeeRole } from '@/lib/api/types';
-import { useState } from 'react';
 
 export default function SitesTab(props: {
   userRole: EmployeeRole | null | undefined;

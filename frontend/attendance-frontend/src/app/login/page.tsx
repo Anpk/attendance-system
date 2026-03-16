@@ -100,7 +100,7 @@ function LoginPageInner() {
     if (!next) return null;
 
     // ✅ deprecated routes: report로 통합
-    if (next === '/attendance/monthly' || next === '/attendance/history') {
+    if (next === '/attendance/monthly') {
       return role === 'EMPLOYEE' ? '/attendance/report' : '/admin/sites';
     }
 

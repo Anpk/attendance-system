@@ -28,67 +28,12 @@ type AuthContextType = {
   logout: () => void;
 };
 
-// ✅ localStorage 복원 시 런타임 검증(최소 보강)
-// - 잘못된 값/구버전 포맷/수동 편집 등으로 role 기반 UI가 깨지는 것을 방지
 const AUTH_STORAGE_KEY = 'user';
 // ✅ JWT access token은 sessionStorage에 저장(브라우저 탭 단위)
 const ACCESS_TOKEN_KEY = 'accessToken';
 const AUTH_REVALIDATE_INTERVAL_MS = 60_000;
 
-const ALLOWED_ROLES = ['EMPLOYEE', 'MANAGER', 'ADMIN'] as const;
-
-type AllowedRole = (typeof ALLOWED_ROLES)[number];
-
-function isAllowedRole(v: unknown): v is AllowedRole {
-  return (
-    typeof v === 'string' && (ALLOWED_ROLES as readonly string[]).includes(v)
-  );
-}
-
-function isStoredUser(v: unknown): v is User {
-  if (!v || typeof v !== 'object') return false;
-  const o = v as Record<string, unknown>;
-
-  // ✅ userId는 number 또는 숫자 문자열을 허용(입력값/구버전 호환)
-  const rawUserId = o.userId;
-  const userIdNum =
-    typeof rawUserId === 'number'
-      ? rawUserId
-      : typeof rawUserId === 'string' && rawUserId.trim().length > 0
-        ? Number(rawUserId)
-        : NaN;
-
-  return Number.isFinite(userIdNum) && isAllowedRole(o.role);
-}
-
 const AuthContext = createContext<AuthContextType | null>(null);
-
-function readStoredUser(): User | null {
-  if (typeof window === 'undefined') return null;
-
-  const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
-  if (!stored) return null;
-
-  try {
-    const parsed: unknown = JSON.parse(stored);
-
-    if (!isStoredUser(parsed)) return null;
-
-    const o = parsed as Record<string, unknown>;
-    const userId =
-      typeof o.userId === 'number'
-        ? o.userId
-        : typeof o.userId === 'string'
-          ? Number(o.userId)
-          : NaN;
-
-    if (!Number.isFinite(userId)) return null;
-
-    return { userId, role: o.role as User['role'] };
-  } catch {
-    return null;
-  }
-}
 
 function getApiBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
