@@ -5,6 +5,7 @@ import io.github.anpk.attendanceapp.attendance.interfaces.dto.*;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequest;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestStatus;
 import io.github.anpk.attendanceapp.correction.infrastructure.repository.CorrectionRequestRepository;
+import io.github.anpk.attendanceapp.employee.domain.model.Employee;
 import io.github.anpk.attendanceapp.employee.infrastructure.repository.EmployeeRepository;
 import io.github.anpk.attendanceapp.error.BusinessException;
 import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
@@ -314,11 +315,17 @@ public class AttendanceService {
      * 관리자/매니저(site 스코프) 근태 리포트(기간)
      * - from/to: YYYY-MM-DD
      * - siteId: 필수
+     * - userId: 선택 (지정 시 해당 user만 조회)
      * - Final 합성 규칙(승인 최신 1건) 적용 결과 기준으로 minutes 집계
      * - 평균은 요구사항에서 제외(총합만 제공)
      */
     @Transactional(readOnly = true)
-    public AdminAttendanceReportResponse getAttendanceReportBySite(Long siteId, String from, String to) {
+    public AdminAttendanceReportResponse getAttendanceReportBySite(
+            Long siteId,
+            Long userId,
+            String from,
+            String to
+    ) {
         if (siteId == null) {
             throw new BusinessException(ErrorCode.MISSING_REQUIRED_PARAM, "siteId는 필수입니다.");
         }
@@ -343,7 +350,17 @@ public class AttendanceService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST_PARAM, "존재하지 않는 siteId 입니다.");
         }
 
-        var employees = employeeRepository.findAllBySiteId(siteId);
+        final List<Employee> employees;
+        if (userId != null) {
+            var one = employeeRepository.findByUserIdAndSiteId(userId, siteId)
+                    .orElseThrow(() -> new BusinessException(
+                            ErrorCode.INVALID_REQUEST_PARAM,
+                            "해당 site에 소속되지 않은 userId 입니다."
+                    ));
+            employees = List.of(one);
+        } else {
+            employees = employeeRepository.findAllBySiteId(siteId);
+        }
 
         var mappedEmployees = employees.stream().map(emp -> {
             var attendances = attendanceRepository

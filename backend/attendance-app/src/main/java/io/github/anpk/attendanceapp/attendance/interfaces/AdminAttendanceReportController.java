@@ -40,6 +40,7 @@ public class AdminAttendanceReportController {
     public AdminAttendanceReportResponse reportBySite(
             @CurrentUserId Long requesterUserId,
             @RequestParam Long siteId,
+            @RequestParam(required = false) Long userId,
             @RequestParam String from,
             @RequestParam String to
     ) {
@@ -51,6 +52,6 @@ public class AdminAttendanceReportController {
             }
         }
 
-        return attendanceService.getAttendanceReportBySite(siteId, from, to);
+        return attendanceService.getAttendanceReportBySite(siteId, userId, from, to);
     }
 }

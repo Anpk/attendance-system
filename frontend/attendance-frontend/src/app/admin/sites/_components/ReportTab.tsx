@@ -127,6 +127,7 @@ export default function ReportTab({
     siteId: string;
     from: string;
     to: string;
+    userId: string;
   } | null>(null);
 
   useEffect(() => {
@@ -202,9 +203,10 @@ export default function ReportTab({
     return (
       last.siteId !== reportSiteId ||
       last.from !== reportFrom ||
-      last.to !== reportTo
+      last.to !== reportTo ||
+      last.userId !== reportUserId
     );
-  }, [autoLoad, reportSiteId, reportFrom, reportTo]);
+  }, [autoLoad, reportSiteId, reportFrom, reportTo, reportUserId]);
 
   const userOptions = useMemo(() => {
     if (!reportData) return [];
@@ -249,7 +251,11 @@ export default function ReportTab({
     setReportSiteId(String(sites[0].siteId));
   }, [ready, user, forbidden, sites, reportSiteId]);
 
-  async function submitFetchReport(override?: { from: string; to: string }) {
+  async function submitFetchReport(override?: {
+    from: string;
+    to: string;
+    userId?: string;
+  }) {
     if (!user) return;
 
     const sid = Number(reportSiteId);
@@ -259,6 +265,8 @@ export default function ReportTab({
     }
     const effectiveFrom = override?.from ?? reportFrom;
     const effectiveTo = override?.to ?? reportTo;
+    const effectiveUserId = (override?.userId ?? reportUserId).trim();
+    const parsedUserId = Number(effectiveUserId);
     if (!effectiveFrom || !effectiveTo) {
       setFlashMessage('시작일/종료일을 입력해 주세요.');
       return;
@@ -275,6 +283,10 @@ export default function ReportTab({
         siteId: sid,
         from: effectiveFrom,
         to: effectiveTo,
+        userId:
+          effectiveUserId && Number.isFinite(parsedUserId)
+            ? parsedUserId
+            : undefined,
       });
       if (mySeq !== reportSeqRef.current) return;
       setReportData(res);
@@ -282,8 +294,8 @@ export default function ReportTab({
         siteId: String(sid),
         from: effectiveFrom,
         to: effectiveTo,
+        userId: effectiveUserId,
       };
-      setReportUserId('');
     } catch (e) {
       if (mySeq !== reportSeqRef.current) return;
       setReportData(null);
@@ -292,7 +304,7 @@ export default function ReportTab({
       if (mySeq === reportSeqRef.current) setReportLoading(false);
     }
   }
-  // 자동 조회: 근무지/기간 변경 시 디바운스 후 조회(직원 선택은 로컬 필터)
+  // 자동 조회: 근무지/기간/직원 변경 시 디바운스 후 서버 조회
   useEffect(() => {
     if (!autoLoad) return;
     if (!ready) return;
@@ -308,7 +320,16 @@ export default function ReportTab({
 
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLoad, reportSiteId, reportFrom, reportTo, ready, user, forbidden]);
+  }, [
+    autoLoad,
+    reportSiteId,
+    reportFrom,
+    reportTo,
+    reportUserId,
+    ready,
+    user,
+    forbidden,
+  ]);
   const setRange = useCallback((nf: string, nt: string) => {
     setReportFrom(nf);
     setReportTo(nt);
@@ -325,6 +346,7 @@ export default function ReportTab({
     void submitFetchReport({
       from: reportDefaults.from,
       to: reportDefaults.to,
+      userId: '',
     });
   }, [reportDefaults]);
 

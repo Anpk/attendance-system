@@ -127,6 +127,7 @@ export async function adminFetchAttendanceReport(params: {
   siteId: number;
   from: string; // YYYY-MM-DD
   to: string; // YYYY-MM-DD
+  userId?: number;
 }): Promise<AdminAttendanceReportResponse> {
   const baseUrl = getBaseUrl();
   const qs = new URLSearchParams({
@@ -134,6 +135,9 @@ export async function adminFetchAttendanceReport(params: {
     from: params.from,
     to: params.to,
   });
+  if (typeof params.userId === 'number' && Number.isFinite(params.userId)) {
+    qs.set('userId', String(params.userId));
+  }
   return apiFetch<AdminAttendanceReportResponse>(
     `${baseUrl}/api/admin/attendance/report?${qs.toString()}`
   );
