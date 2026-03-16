@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  useCallback,
   createContext,
   useContext,
   useEffect,
@@ -15,6 +16,8 @@ import { ApiError, type AuthMeResponse } from '@/lib/api/types';
 type User = {
   userId: number;
   role: 'EMPLOYEE' | 'MANAGER' | 'ADMIN';
+  siteId?: number;
+  active?: boolean;
 };
 
 type AuthContextType = {
@@ -30,6 +33,7 @@ type AuthContextType = {
 const AUTH_STORAGE_KEY = 'user';
 // ✅ JWT access token은 sessionStorage에 저장(브라우저 탭 단위)
 const ACCESS_TOKEN_KEY = 'accessToken';
+const AUTH_REVALIDATE_INTERVAL_MS = 60_000;
 
 const ALLOWED_ROLES = ['EMPLOYEE', 'MANAGER', 'ADMIN'] as const;
 
@@ -95,37 +99,117 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+type LoginReason = 'expired' | 'inactive';
+
+function buildLoginUrl(reason: LoginReason): string {
+  if (typeof window === 'undefined') return '/login';
+  const nextPath = `${window.location.pathname}${window.location.search ?? ''}`;
+  return `/login?reason=${reason}&next=${encodeURIComponent(nextPath)}`;
+}
+
+function toUserFromMe(me: AuthMeResponse): User {
+  return {
+    userId: me.userId,
+    role: me.role,
+    siteId: me.siteId,
+    active: me.active,
+  };
+}
+
+function isSameUser(a: User | null, b: User): boolean {
+  if (!a) return false;
+  return (
+    a.userId === b.userId &&
+    a.role === b.role &&
+    a.siteId === b.siteId &&
+    a.active === b.active
+  );
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const router = useRouter();
   const unauthorizedHandledRef = useRef(false);
+  const sessionRevalidateInFlightRef = useRef(false);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    function onUnauthorized(_ev: Event) {
-      if (unauthorizedHandledRef.current) return;
-      unauthorizedHandledRef.current = true;
-
-      // session/local 정리 + 로그인 화면으로 이동
-      setUser(null);
+  const clearSessionState = useCallback(() => {
+    setUser(null);
+    if (typeof window !== 'undefined') {
       localStorage.removeItem(AUTH_STORAGE_KEY);
       window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
-      setReady(true);
+    }
+  }, []);
 
-      // login 페이지에서 reason 처리
-      const nextPath = `${window.location.pathname}${window.location.search ?? ''}`;
-      const loginUrl = `/login?reason=expired&next=${encodeURIComponent(nextPath)}`;
-
-      // ✅ 뒤로가기(Back)로 보호 페이지로 복귀하는 것을 최소화: 현재 히스토리 엔트리를 login으로 교체
+  const redirectToLogin = useCallback(
+    (reason: LoginReason) => {
+      if (typeof window === 'undefined') return;
+      const loginUrl = buildLoginUrl(reason);
       try {
         window.history.replaceState(null, '', loginUrl);
       } catch {
         // ignore
       }
-
       router.replace(loginUrl);
+    },
+    [router]
+  );
+
+  const forceLogout = useCallback(
+    (reason: LoginReason) => {
+      clearSessionState();
+      setReady(true);
+      redirectToLogin(reason);
+    },
+    [clearSessionState, redirectToLogin]
+  );
+
+  const applyAuthMe = useCallback(
+    (me: AuthMeResponse): boolean => {
+      if (!me.active) {
+        forceLogout('inactive');
+        return false;
+      }
+
+      const nextUser = toUserFromMe(me);
+      setUser((prev) => (isSameUser(prev, nextUser) ? prev : nextUser));
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+      return true;
+    },
+    [forceLogout]
+  );
+
+  const revalidateSession = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    const token = window.sessionStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token || token.trim().length === 0) return;
+    if (sessionRevalidateInFlightRef.current) return;
+
+    sessionRevalidateInFlightRef.current = true;
+    try {
+      const me = await apiFetch<AuthMeResponse>(`${getApiBaseUrl()}/api/auth/me`);
+      applyAuthMe(me);
+    } catch (e: unknown) {
+      const isAuthError =
+        e instanceof ApiError &&
+        (e.httpStatus === 401 || e.httpStatus === 403);
+      if (isAuthError) {
+        forceLogout('expired');
+      }
+      // 네트워크/일시 오류는 다음 주기에 재시도
+    } finally {
+      sessionRevalidateInFlightRef.current = false;
+    }
+  }, [applyAuthMe, forceLogout]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    function onUnauthorized() {
+      if (unauthorizedHandledRef.current) return;
+      unauthorizedHandledRef.current = true;
+      forceLogout('expired');
 
       // 연속 호출 레이스 방지(짧은 락)
       setTimeout(() => {
@@ -140,15 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!ev.persisted) return;
       const token = window.sessionStorage.getItem(ACCESS_TOKEN_KEY);
       if (token && token.trim().length > 0) return;
-
-      const nextPath = `${window.location.pathname}${window.location.search ?? ''}`;
-      const loginUrl = `/login?reason=expired&next=${encodeURIComponent(nextPath)}`;
-      try {
-        window.history.replaceState(null, '', loginUrl);
-      } catch {
-        // ignore
-      }
-      router.replace(loginUrl);
+      forceLogout('expired');
     }
 
     window.addEventListener('pageshow', onPageShow);
@@ -157,7 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('auth:unauthorized', onUnauthorized);
       window.removeEventListener('pageshow', onPageShow);
     };
-  }, [router]);
+  }, [forceLogout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,10 +247,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ✅ token이 없으면 로그인 상태로 간주하지 않음
       const token = window.sessionStorage.getItem(ACCESS_TOKEN_KEY);
       if (!token || token.trim().length === 0) {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+        clearSessionState();
         if (!cancelled) {
-          setUser(null);
           setReady(true);
         }
         return;
@@ -186,10 +260,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           `${getApiBaseUrl()}/api/auth/me`
         );
         if (cancelled) return;
-
-        const nextUser: User = { userId: me.userId, role: me.role };
-        setUser(nextUser);
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+        applyAuthMe(me);
         setReady(true);
       } catch (e: unknown) {
         // ✅ 401/403은 재시도 금지(토큰 만료/권한 문제)
@@ -205,10 +276,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               `${getApiBaseUrl()}/api/auth/me`
             );
             if (cancelled) return;
-
-            const nextUser: User = { userId: me2.userId, role: me2.role };
-            setUser(nextUser);
-            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+            applyAuthMe(me2);
             setReady(true);
             return;
           } catch {
@@ -217,10 +285,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         // 만료/무효 토큰 또는 재시도 실패: 저장값 정리 후 비로그인 상태로 전환
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+        clearSessionState();
         if (!cancelled) {
-          setUser(null);
           setReady(true);
         }
       }
@@ -231,7 +297,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyAuthMe, clearSessionState]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!ready || !user) return;
+
+    const onFocus = () => {
+      void revalidateSession();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      void revalidateSession();
+    };
+
+    const timerId = window.setInterval(() => {
+      void revalidateSession();
+    }, AUTH_REVALIDATE_INTERVAL_MS);
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.clearInterval(timerId);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [ready, revalidateSession, user]);
 
   function login(nextUser: User, accessToken?: string) {
     setUser(nextUser);
