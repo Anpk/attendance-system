@@ -7,6 +7,7 @@ public record AdminAttendanceReportItemResponse(
         String workDate,
         OffsetDateTime checkInAt,
         OffsetDateTime checkOutAt,
+        long breakMinutes,
         Long workMinutes,
         boolean isCorrected
 ) {}

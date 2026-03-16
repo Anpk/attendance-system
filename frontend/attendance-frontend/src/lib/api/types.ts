@@ -54,6 +54,9 @@ export type AttendanceActionResponse = {
   checkInAt: string | null; // ISO with +09:00
   checkOutAt: string | null; // ISO with +09:00
   isCorrected: boolean;
+  breakInProgress: boolean;
+  totalBreakMinutes: number;
+  activeBreakStartedAt: string | null; // ISO with +09:00
 };
 
 export type AttendanceStatus = {
@@ -87,6 +90,7 @@ export type AttendanceReportItemResponse = {
   workDate: string; // YYYY-MM-DD
   checkInAt: string | null;
   checkOutAt: string | null;
+  breakMinutes?: number;
   workMinutes: number | null;
   isCorrected: boolean;
 };
@@ -153,6 +157,7 @@ export type AdminAttendanceReportItemResponse = {
   workDate: string; // YYYY-MM-DD
   checkInAt: string | null;
   checkOutAt: string | null;
+  breakMinutes?: number;
   workMinutes: number | null;
   isCorrected: boolean;
 };

@@ -16,6 +16,8 @@ import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
 import type { AttendanceActionResponse } from '@/lib/api/types';
 import AppHeader from '@/app/_components/AppHeader';
+import AsyncButton from '@/app/_components/AsyncButton';
+import FlashMessage from '@/app/_components/FlashMessage';
 
 function AttendancePageInner() {
   const { user, ready } = useRequireAuth();
@@ -50,6 +52,9 @@ function AttendancePageInner() {
     checkInAt: null,
     checkOutAt: null,
     isCorrected: false,
+    breakInProgress: false,
+    totalBreakMinutes: 0,
+    activeBreakStartedAt: null,
   });
 
   // 환경변수 기반 API Base URL
@@ -66,12 +71,15 @@ function AttendancePageInner() {
   const inflightRef = useRef(false);
 
   // 어떤 액션이 처리 중인지 버튼 라벨에 반영하기 위한 ref
-  const inflightActionRef = useRef<'checkin' | 'checkout' | null>(null);
+  const inflightActionRef = useRef<
+    'checkin' | 'checkout' | 'break-start' | 'break-end' | null
+  >(null);
 
   const messageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isCheckedIn = today.checkInAt !== null;
   const isCheckedOut = today.checkOutAt !== null;
+  const isOnBreak = today.breakInProgress;
 
   const isPreviewSubmitting =
     previewOpen &&
@@ -165,6 +173,24 @@ function AttendancePageInner() {
 
     // 그 외는 기존 매퍼 사용
     return toUserMessage(e);
+  }
+
+  function formatMinutes(mins: number): string {
+    const safe = Number.isFinite(mins) ? Math.max(Math.trunc(mins), 0) : 0;
+    const h = Math.floor(safe / 60);
+    const m = safe % 60;
+    if (h <= 0) return `${m}분`;
+    if (m === 0) return `${h}시간`;
+    return `${h}시간 ${m}분`;
+  }
+
+  function formatHm(iso: string | null): string {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '-';
+    return `${String(d.getHours()).padStart(2, '0')}:${String(
+      d.getMinutes()
+    ).padStart(2, '0')}`;
   }
 
   function PhotoConfirmModal(props: {
@@ -443,7 +469,14 @@ function AttendancePageInner() {
   }
 
   function handleCheckOutClick() {
-    if (!user || loading || inflightRef.current || !isCheckedIn || isCheckedOut)
+    if (
+      !user ||
+      loading ||
+      inflightRef.current ||
+      !isCheckedIn ||
+      isCheckedOut ||
+      isOnBreak
+    )
       return;
     checkOutFileInputRef.current?.click();
   }
@@ -470,6 +503,50 @@ function AttendancePageInner() {
 
     setPreviewError('');
     openPreview('checkout', file);
+  }
+
+  async function startBreak() {
+    if (!user || loading || inflightRef.current) return;
+    inflightRef.current = true;
+    inflightActionRef.current = 'break-start';
+    setLoading(true);
+    setMessage('');
+    try {
+      const result = await apiFetch<AttendanceActionResponse>(
+        `${baseUrl}/api/attendance/break-start`,
+        { method: 'POST' }
+      );
+      setToday(result);
+      setFlashMessage('✅ 휴게를 시작했습니다.');
+    } catch (e) {
+      setFlashMessage(`❌ ${toActionUserMessage(e)}`);
+    } finally {
+      inflightActionRef.current = null;
+      inflightRef.current = false;
+      setLoading(false);
+    }
+  }
+
+  async function endBreak() {
+    if (!user || loading || inflightRef.current) return;
+    inflightRef.current = true;
+    inflightActionRef.current = 'break-end';
+    setLoading(true);
+    setMessage('');
+    try {
+      const result = await apiFetch<AttendanceActionResponse>(
+        `${baseUrl}/api/attendance/break-end`,
+        { method: 'POST' }
+      );
+      setToday(result);
+      setFlashMessage('✅ 휴게를 종료했습니다.');
+    } catch (e) {
+      setFlashMessage(`❌ ${toActionUserMessage(e)}`);
+    } finally {
+      inflightActionRef.current = null;
+      inflightRef.current = false;
+      setLoading(false);
+    }
   }
 
   async function confirmPreviewUpload() {
@@ -535,29 +612,66 @@ function AttendancePageInner() {
           onChange={handleCheckOutPhotoSelected}
         />
 
-        <div className="flex gap-4">
-          <button
-            disabled={loading || isCheckedIn}
-            aria-busy={loading}
-            className="rounded bg-blue-600 px-6 py-3 text-white disabled:opacity-50"
-            onClick={handleCheckInClick}
-          >
-            {loading && inflightActionRef.current === 'checkin'
-              ? '처리 중...'
-              : '출근'}
-          </button>
+        <section className="rounded border border-gray-300 bg-white p-4 text-sm text-gray-800 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
+          <div className="grid gap-1 text-xs text-gray-700 dark:text-gray-300">
+            <p>
+              상태: {isCheckedOut ? '퇴근 완료' : isCheckedIn ? '근무 중' : '출근 전'}
+              {isOnBreak ? ' (휴게 중)' : ''}
+            </p>
+            <p>누적 휴게 시간: {formatMinutes(today.totalBreakMinutes)}</p>
+            {isOnBreak ? (
+              <p>휴게 시작 시각: {formatHm(today.activeBreakStartedAt)}</p>
+            ) : null}
+          </div>
 
-          <button
-            disabled={loading || !isCheckedIn || isCheckedOut}
-            aria-busy={loading}
-            className="rounded bg-green-600 px-6 py-3 text-white disabled:opacity-50"
-            onClick={handleCheckOutClick}
-          >
-            {loading && inflightActionRef.current === 'checkout'
-              ? '처리 중...'
-              : '퇴근'}
-          </button>
-        </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <AsyncButton
+              type="button"
+              loading={loading && inflightActionRef.current === 'checkin'}
+              loadingText="처리 중..."
+              className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
+              disabled={isCheckedIn}
+              onClick={handleCheckInClick}
+            >
+              출근
+            </AsyncButton>
+
+            <AsyncButton
+              type="button"
+              loading={loading && inflightActionRef.current === 'checkout'}
+              loadingText="처리 중..."
+              className="rounded bg-green-600 px-4 py-2 text-white disabled:opacity-50"
+              disabled={!isCheckedIn || isCheckedOut || isOnBreak}
+              onClick={handleCheckOutClick}
+            >
+              퇴근
+            </AsyncButton>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            <AsyncButton
+              type="button"
+              loading={loading && inflightActionRef.current === 'break-start'}
+              loadingText="처리 중..."
+              className="rounded bg-amber-500 px-4 py-2 text-white disabled:opacity-50"
+              disabled={!isCheckedIn || isCheckedOut || isOnBreak}
+              onClick={() => void startBreak()}
+            >
+              휴게 시작
+            </AsyncButton>
+
+            <AsyncButton
+              type="button"
+              loading={loading && inflightActionRef.current === 'break-end'}
+              loadingText="처리 중..."
+              className="rounded bg-slate-600 px-4 py-2 text-white disabled:opacity-50"
+              disabled={!isCheckedIn || isCheckedOut || !isOnBreak}
+              onClick={() => void endBreak()}
+            >
+              휴게 종료
+            </AsyncButton>
+          </div>
+        </section>
 
         <PhotoConfirmModal
           open={previewOpen}
@@ -570,7 +684,7 @@ function AttendancePageInner() {
           onConfirm={confirmPreviewUpload}
         />
 
-        {message && <p className="text-lg">{message}</p>}
+        <FlashMessage message={message} className="mb-0" />
       </main>
     </div>
   );

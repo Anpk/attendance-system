@@ -46,20 +46,23 @@ public class AttendanceController {
         return ResponseEntity.ok(attendanceService.checkOut(userId, photo));
     }
 
+    @PostMapping("/break-start")
+    public ResponseEntity<AttendanceActionResponse> breakStart(@CurrentUserId Long userId) {
+        return ResponseEntity.ok(attendanceService.breakStart(userId));
+    }
+
+    @PostMapping("/break-end")
+    public ResponseEntity<AttendanceActionResponse> breakEnd(@CurrentUserId Long userId) {
+        return ResponseEntity.ok(attendanceService.breakEnd(userId));
+    }
+
     /**
      * 오늘 상태 조회 (Final 합성 규칙 적용)
      * - /{attendanceId} 와 충돌 방지: attendanceId는 숫자만 매칭하도록 아래에서 제한
      */
     @GetMapping("/today")
     public AttendanceActionResponse today(@CurrentUserId Long userId) {
-        AttendanceService.FinalSnapshot snap = attendanceService.getTodayFinalSnapshot(userId);
-        return new AttendanceActionResponse(
-                snap.attendanceId(),
-                snap.workDate().toString(),
-                snap.finalCheckInAt(),
-                snap.finalCheckOutAt(),
-                snap.isCorrected()
-        );
+        return attendanceService.getTodayAction(userId);
     }
 
     /**
