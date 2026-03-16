@@ -89,6 +89,10 @@ export default function ReportTab({
     return { from: toYmdLocal(from), to: toYmdLocal(now) };
   }, []);
 
+  const isAdminOrManager = useMemo(() => {
+    return !!user && (user.role === 'ADMIN' || user.role === 'MANAGER');
+  }, [user]);
+
   const [reportSiteId, setReportSiteId] = useState<string>('');
   const [reportUserId, setReportUserId] = useState<string>(''); // '' = 전체
   const [reportFrom, setReportFrom] = useState<string>(reportDefaults.from);
@@ -807,7 +811,8 @@ export default function ReportTab({
         </div>
       )}
 
-      {user && selectedAttendance && (
+      {/* ✅ ADMIN/MANAGER 대리 정정 신청: 성공 시 모달 닫기 + 리포트 재조회 */}
+      {!forbidden && user && selectedAttendance && isAdminOrManager && (
         <CorrectionRequestModal
           open={!!selectedAttendance}
           onClose={() => {

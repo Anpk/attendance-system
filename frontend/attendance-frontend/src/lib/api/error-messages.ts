@@ -20,7 +20,7 @@ export function toUserMessage(err: unknown): string {
 
     // 정정 요청
     case 'PENDING_REQUEST_EXISTS':
-      return '이미 처리 중인 정정 요청이 있습니다.';
+      return '이미 승인 대기 중인 정정 요청이 있습니다. (중복 신청 불가)';
     case 'OUT_OF_CORRECTION_WINDOW':
       return '정정 요청은 당월만 가능합니다.';
     case 'INVALID_TIME_ORDER':

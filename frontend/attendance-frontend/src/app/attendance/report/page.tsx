@@ -828,6 +828,7 @@ function AttendanceReportPageInner() {
           </section>
         )}
 
+        {/* ✅ EMPLOYEE 본인 리포트에서의 정정 신청. ADMIN/MANAGER 대리 신청은 아래 ReportTab에서 처리 */}
         {!forbidden && isEmployee && user && selectedAttendance && (
           <CorrectionRequestModal
             open={!!selectedAttendance}
@@ -839,6 +840,7 @@ function AttendanceReportPageInner() {
             initialCheckOutAt={selectedAttendance.checkOutAt}
             onCreated={() => {
               setToast('정정 요청이 접수되었습니다.');
+              setSelectedAttendance(null);
               void load();
             }}
           />
