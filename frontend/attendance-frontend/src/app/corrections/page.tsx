@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 
 import AppHeader from '@/app/_components/AppHeader';
+import AsyncButton from '@/app/_components/AsyncButton';
 import type { CorrectionRequestListItem } from '@/app/_components/CorrectionRequestDetailModal';
 import { apiFetch } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/types';
@@ -467,20 +468,16 @@ function CorrectionsPageInner() {
       <main className="mx-auto w-full max-w-3xl px-4 py-6">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl font-bold">정정</h1>
-          <button
+          <AsyncButton
             type="button"
             onClick={fetchList}
+            loading={loading}
+            loadingText="갱신 중..."
+            showSpinner
             className="rounded border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 hover:bg-gray-100 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
-            disabled={loading}
-            aria-busy={loading}
           >
-            <span className="inline-flex items-center gap-2">
-              {loading ? (
-                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent" />
-              ) : null}
-              {loading ? '갱신 중...' : '새로고침'}
-            </span>
-          </button>
+            새로고침
+          </AsyncButton>
         </div>
 
         <div className="mt-4 flex gap-2">
@@ -580,20 +577,15 @@ function CorrectionsPageInner() {
               ※ 관리자/매니저만 근무지/직원 필터를 사용할 수 있습니다.
             </p>
             <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-              <button
+              <AsyncButton
                 type="button"
                 onClick={applyFilters}
+                loading={loading}
+                showSpinner
                 className="min-w-[92px] whitespace-nowrap rounded border border-gray-400 bg-white px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
-                disabled={loading}
-                aria-busy={loading}
               >
-                <span className="inline-flex items-center gap-2">
-                  {loading ? (
-                    <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent" />
-                  ) : null}
-                  조회
-                </span>
-              </button>
+                조회
+              </AsyncButton>
 
               <button
                 type="button"

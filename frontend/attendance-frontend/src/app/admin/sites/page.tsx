@@ -12,6 +12,7 @@ import { useEmployeesOps } from './_hooks/useEmployeesOps';
 import { useSitesOps } from './_hooks/useSitesOps';
 
 import { useFlashMessage, useRequireAuth } from '@/app/context/AuthContext';
+import FlashMessage from '@/app/_components/FlashMessage';
 
 type TabKey = 'sites' | 'employees';
 
@@ -102,11 +103,7 @@ function AdminSitesPageInner() {
           </div>
         )}
 
-        {message && (
-          <div className="mb-4 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
-            {message}
-          </div>
-        )}
+        <FlashMessage message={message} />
 
         {tab === 'sites' && (
           <SitesTab

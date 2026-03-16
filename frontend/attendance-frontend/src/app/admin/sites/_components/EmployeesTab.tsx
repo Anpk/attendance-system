@@ -7,6 +7,8 @@ import type {
 } from '@/lib/api/types';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { useState } from 'react';
+import AsyncButton from '@/app/_components/AsyncButton';
+import ConfirmModal from '@/app/_components/ConfirmModal';
 
 export default function EmployeesTab(props: {
   user: { userId: number; role: EmployeeRole } | null;
@@ -159,9 +161,20 @@ export default function EmployeesTab(props: {
   const [editModalOpenUserId, setEditModalOpenUserId] = useState<number | null>(
     null
   );
+  const [confirmDeactivateTarget, setConfirmDeactivateTarget] =
+    useState<AdminEmployeeResponse | null>(null);
+  const [isBulkMoveConfirmOpen, setIsBulkMoveConfirmOpen] = useState(false);
+  const [isAssignmentsConfirmOpen, setIsAssignmentsConfirmOpen] =
+    useState(false);
 
   const editingEmp =
     filteredEmployees.find((e) => e.userId === editModalOpenUserId) ?? null;
+  const assignmentsDeltaCount = mgrDelta.toAdd.length + mgrDelta.toRemove.length;
+  const bulkTargetSite = (() => {
+    const sid = Number(bulkTargetSiteId);
+    if (!Number.isFinite(sid)) return null;
+    return sites.find((s) => s.siteId === sid) ?? null;
+  })();
 
   return (
     <section className="rounded border border-gray-300 bg-white p-4 dark:border-gray-600 dark:bg-gray-900">
@@ -285,13 +298,14 @@ export default function EmployeesTab(props: {
                 </label>
               </div>
 
-              <button
+              <AsyncButton
                 type="submit"
-                disabled={loading}
+                loading={loading}
+                loadingText="생성 중…"
                 className="rounded border border-gray-400 px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
               >
-                {loading ? '생성 중…' : '생성'}
-              </button>
+                생성
+              </AsyncButton>
 
               <div className="text-[11px] text-gray-500 dark:text-gray-300">
                 * 직원 생성은 ADMIN 전용입니다.
@@ -382,14 +396,24 @@ export default function EmployeesTab(props: {
             >
               선택 해제
             </button>
-            <button
+            <AsyncButton
               type="button"
-              onClick={() => void submitBulkMoveEmployees()}
-              disabled={bulkMoving || bulkSelectedUserIds.length === 0}
+              loading={bulkMoving}
+              loadingText="이동 중..."
+              disabled={bulkSelectedUserIds.length === 0}
+              onClick={() => {
+                const hasSelected = bulkSelectedUserIds.length > 0;
+                const hasTarget = bulkTargetSite !== null && bulkTargetSite.active;
+                if (!hasSelected || !hasTarget) {
+                  void submitBulkMoveEmployees();
+                  return;
+                }
+                setIsBulkMoveConfirmOpen(true);
+              }}
               className="rounded border border-gray-400 px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
             >
               일괄 이동
-            </button>
+            </AsyncButton>
             <div className="text-[11px] text-gray-500 dark:text-gray-300">
               * 목록에서 EMPLOYEE만 선택할 수 있습니다. (MANAGER는 서버에서
               담당(assignments) 범위로 추가 검증)
@@ -480,10 +504,8 @@ export default function EmployeesTab(props: {
                           type="button"
                           onClick={() => {
                             if (x.active) {
-                              const ok = window.confirm(
-                                `직원(#${x.userId})을 비활성화할까요?`
-                              );
-                              if (!ok) return;
+                              setConfirmDeactivateTarget(x);
+                              return;
                             }
                             void submitToggleActiveQuick(x.userId, !x.active);
                           }}
@@ -520,6 +542,7 @@ export default function EmployeesTab(props: {
             if (e.target === e.currentTarget && !loading) {
               cancelEditEmployee();
               setEditModalOpenUserId(null);
+              setIsAssignmentsConfirmOpen(false);
             }
           }}
         >
@@ -533,6 +556,7 @@ export default function EmployeesTab(props: {
                 onClick={() => {
                   cancelEditEmployee();
                   setEditModalOpenUserId(null);
+                  setIsAssignmentsConfirmOpen(false);
                 }}
                 disabled={loading}
                 className="rounded border border-gray-400 px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
@@ -738,19 +762,25 @@ export default function EmployeesTab(props: {
                       )}
 
                       <div className="mt-2 flex gap-2">
-                        <button
+                        <AsyncButton
                           type="button"
-                          onClick={() =>
-                            void applyManagerAssignments(editingUserId!)
-                          }
-                          disabled={loading}
+                          loading={loading}
+                          loadingText="적용 중..."
+                          onClick={() => {
+                            if (editingUserId == null) return;
+                            if (assignmentsDeltaCount === 0) {
+                              void applyManagerAssignments(editingUserId);
+                              return;
+                            }
+                            setIsAssignmentsConfirmOpen(true);
+                          }}
                           className="rounded border border-gray-400 px-3 py-2 text-sm hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
                         >
                           적용
-                          {mgrDelta.toAdd.length + mgrDelta.toRemove.length > 0
+                          {assignmentsDeltaCount > 0
                             ? ` (+${mgrDelta.toAdd.length}/-${mgrDelta.toRemove.length})`
                             : ''}
-                        </button>
+                        </AsyncButton>
                         <button
                           type="button"
                           onClick={() =>
@@ -828,6 +858,7 @@ export default function EmployeesTab(props: {
                 onClick={() => {
                   cancelEditEmployee();
                   setEditModalOpenUserId(null);
+                  setIsAssignmentsConfirmOpen(false);
                 }}
                 disabled={loading}
                 className="rounded border border-gray-400 px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800"
@@ -838,6 +869,66 @@ export default function EmployeesTab(props: {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmDeactivateTarget !== null}
+        title="직원 비활성화 확인"
+        description={
+          confirmDeactivateTarget
+            ? `직원 #${confirmDeactivateTarget.userId} 계정을 비활성화할까요?\n비활성화 시 기존 로그인 세션이 제한될 수 있습니다.`
+            : undefined
+        }
+        confirmText="비활성화"
+        cancelText="취소"
+        danger
+        loading={
+          confirmDeactivateTarget != null &&
+          pendingActiveUserId === confirmDeactivateTarget.userId
+        }
+        onClose={() => setConfirmDeactivateTarget(null)}
+        onConfirm={async () => {
+          if (!confirmDeactivateTarget) return;
+          await submitToggleActiveQuick(confirmDeactivateTarget.userId, false);
+          setConfirmDeactivateTarget(null);
+        }}
+      />
+
+      <ConfirmModal
+        open={isBulkMoveConfirmOpen}
+        title="일괄 이동 확인"
+        description={
+          bulkTargetSite
+            ? `선택한 직원 ${bulkSelectedUserIds.length}명을\n근무지 #${bulkTargetSite.siteId} · ${bulkTargetSite.name}(으)로 이동할까요?`
+            : '선택 정보가 유효하지 않습니다.'
+        }
+        confirmText="이동 실행"
+        cancelText="취소"
+        loading={bulkMoving}
+        onClose={() => setIsBulkMoveConfirmOpen(false)}
+        onConfirm={async () => {
+          await submitBulkMoveEmployees();
+          setIsBulkMoveConfirmOpen(false);
+        }}
+      />
+
+      <ConfirmModal
+        open={isAssignmentsConfirmOpen}
+        title="담당 근무지 적용 확인"
+        description={
+          editingUserId != null
+            ? `MANAGER #${editingUserId}의 담당 근무지 변경을 적용할까요?\n추가 ${mgrDelta.toAdd.length}개 / 해제 ${mgrDelta.toRemove.length}개`
+            : undefined
+        }
+        confirmText="적용"
+        cancelText="취소"
+        loading={loading}
+        onClose={() => setIsAssignmentsConfirmOpen(false)}
+        onConfirm={async () => {
+          if (editingUserId == null) return;
+          await applyManagerAssignments(editingUserId);
+          setIsAssignmentsConfirmOpen(false);
+        }}
+      />
     </section>
   );
 }
