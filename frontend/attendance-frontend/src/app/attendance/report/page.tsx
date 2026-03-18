@@ -8,12 +8,13 @@ import { toUserMessage } from '@/lib/api/error-messages';
 import { fetchAttendanceReport } from '@/lib/api/attendance-report';
 import { adminListSites } from '@/lib/api/admin';
 import type {
+  AttendanceBreakHistoryItemResponse,
   AttendanceReportResponse,
   AdminSiteResponse,
   EmployeeRole,
 } from '@/lib/api/types';
 import ReportTab from '@/app/admin/sites/_components/ReportTab';
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -34,6 +35,12 @@ function formatIsoToHm(iso: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso; // fallback
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function formatBreakRange(start: string | null, end: string | null): string {
+  const s = formatIsoToHm(start);
+  const e = formatIsoToHm(end);
+  return `${s} ~ ${e}`;
 }
 
 function formatMinutes(mins: number): string {
@@ -98,7 +105,11 @@ function AttendanceReportPageInner() {
     workDate: string;
     checkInAt: string | null;
     checkOutAt: string | null;
+    breakHistory: AttendanceBreakHistoryItemResponse[];
   } | null>(null);
+  const [expandedBreakDetails, setExpandedBreakDetails] = useState<
+    Record<number, boolean>
+  >({});
   const [toast, setToast] = useState<string>('');
   const loadSeqRef = useRef(0);
   const lastLoadedRef = useRef<{ from: string; to: string } | null>(null);
@@ -211,6 +222,7 @@ function AttendanceReportPageInner() {
         missingCheckoutRatePct: 0,
         validWorkDays: 0,
         totalWorkMinutes: 0,
+        totalBreakMinutes: 0,
       };
     }
 
@@ -230,6 +242,10 @@ function AttendanceReportPageInner() {
     const totalWorkMinutes = applySummaryFilter
       ? baseItems.reduce((acc, x) => acc + (x.workMinutes ?? 0), 0)
       : data.totalWorkMinutes;
+    const totalBreakMinutes = baseItems.reduce(
+      (acc, x) => acc + (x.breakMinutes ?? 0),
+      0
+    );
 
     return {
       correctedCount,
@@ -238,6 +254,7 @@ function AttendanceReportPageInner() {
       missingCheckoutRatePct,
       validWorkDays,
       totalWorkMinutes,
+      totalBreakMinutes,
     };
   }, [data, summaryBaseItems, applySummaryFilter]);
 
@@ -268,6 +285,7 @@ function AttendanceReportPageInner() {
       });
       if (mySeq !== loadSeqRef.current) return;
       setData(res);
+      setExpandedBreakDetails({});
       lastLoadedRef.current = { from: effectiveFrom, to: effectiveTo };
     } catch (e) {
       if (mySeq !== loadSeqRef.current) return;
@@ -294,6 +312,7 @@ function AttendanceReportPageInner() {
     setToast('');
     clearMessage();
     setData(null);
+    setExpandedBreakDetails({});
     void load({ from: defaults.from, to: defaults.to });
   }
 
@@ -702,7 +721,7 @@ function AttendanceReportPageInner() {
                   </div>
                 </div>
 
-                <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
+                <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-7">
                   <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
                     <div className="text-[11px] text-gray-600 dark:text-gray-300">
                       기간
@@ -725,6 +744,14 @@ function AttendanceReportPageInner() {
                     </div>
                     <div className="text-sm font-semibold">
                       {formatMinutes(summary.totalWorkMinutes)}
+                    </div>
+                  </div>
+                  <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
+                    <div className="text-[11px] text-gray-600 dark:text-gray-300">
+                      총 휴게시간
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {formatMinutes(summary.totalBreakMinutes)}
                     </div>
                   </div>
                   <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-950">
@@ -766,56 +793,124 @@ function AttendanceReportPageInner() {
                     선택한 기간/필터 조건에 해당하는 항목이 없습니다.
                   </div>
                 ) : (
-                  <div className="overflow-auto max-h-[70vh]">
+                  <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-sm">
                       <thead>
                         <tr className="sticky top-0 z-10 border-b border-gray-400 bg-gray-200 text-left dark:border-gray-600 dark:bg-gray-950">
                           <th className="p-2">일자</th>
                           <th className="p-2">출근</th>
                           <th className="p-2">퇴근</th>
+                          <th className="p-2">휴게</th>
                           <th className="p-2">근무</th>
                           <th className="p-2">정정</th>
                           <th className="p-2">정정 요청</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {displayedItems.map((x) => (
-                          <tr
-                            key={x.attendanceId}
-                            className="border-b border-gray-300 dark:border-gray-600"
-                          >
-                            <td className="p-2 font-medium">{x.workDate}</td>
-                            <td className="p-2">
-                              {formatIsoToHm(x.checkInAt)}
-                            </td>
-                            <td className="p-2">
-                              {formatIsoToHm(x.checkOutAt)}
-                            </td>
-                            <td className="p-2">
-                              {x.workMinutes == null
-                                ? '-'
-                                : formatMinutes(x.workMinutes)}
-                            </td>
-                            <td className="p-2">{x.isCorrected ? 'Y' : '-'}</td>
-                            <td className="p-2">
-                              <button
-                                type="button"
-                                className="rounded border border-gray-400 px-2 py-1 text-xs hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
-                                onClick={() =>
-                                  setSelectedAttendance({
-                                    attendanceId: x.attendanceId,
-                                    workDate: x.workDate,
-                                    checkInAt: x.checkInAt,
-                                    checkOutAt: x.checkOutAt,
-                                  })
-                                }
-                                disabled={loading}
+                        {displayedItems.map((x) => {
+                          const breakHistory = x.breakHistory ?? [];
+                          const isExpanded = !!expandedBreakDetails[x.attendanceId];
+                          return (
+                            <Fragment key={x.attendanceId}>
+                              <tr
+                                key={`row-${x.attendanceId}`}
+                                className="border-b border-gray-300 dark:border-gray-600"
                               >
-                                정정 요청
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                                <td className="p-2 font-medium">{x.workDate}</td>
+                                <td className="p-2">{formatIsoToHm(x.checkInAt)}</td>
+                                <td className="p-2">{formatIsoToHm(x.checkOutAt)}</td>
+                                <td className="p-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span>{formatMinutes(x.breakMinutes ?? 0)}</span>
+                                    <button
+                                      type="button"
+                                      className="rounded border border-gray-400 px-2 py-1 text-[11px] hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
+                                      onClick={() =>
+                                        setExpandedBreakDetails((prev) => ({
+                                          ...prev,
+                                          [x.attendanceId]: !prev[x.attendanceId],
+                                        }))
+                                      }
+                                    >
+                                      {isExpanded ? '상세 접기' : '휴게 상세'}
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="p-2">
+                                  {x.workMinutes == null
+                                    ? '-'
+                                    : formatMinutes(x.workMinutes)}
+                                </td>
+                                <td className="p-2">{x.isCorrected ? 'Y' : '-'}</td>
+                                <td className="p-2">
+                                  <button
+                                    type="button"
+                                    className="rounded border border-gray-400 px-2 py-1 text-xs hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-800"
+                                    onClick={() =>
+                                      setSelectedAttendance({
+                                        attendanceId: x.attendanceId,
+                                        workDate: x.workDate,
+                                        checkInAt: x.checkInAt,
+                                        checkOutAt: x.checkOutAt,
+                                        breakHistory,
+                                      })
+                                    }
+                                    disabled={loading}
+                                  >
+                                    정정 요청
+                                  </button>
+                                </td>
+                              </tr>
+
+                              {isExpanded && (
+                                <tr
+                                  className="border-b border-gray-300 bg-gray-50 dark:border-gray-600 dark:bg-gray-950"
+                                >
+                                  <td colSpan={7} className="p-2">
+                                    {breakHistory.length === 0 ? (
+                                      <div className="text-xs text-gray-600 dark:text-gray-300">
+                                        등록된 휴게 이력이 없습니다.
+                                      </div>
+                                    ) : (
+                                      <div className="overflow-x-auto">
+                                        <table className="w-full border-collapse text-xs">
+                                          <thead>
+                                            <tr className="border-b border-gray-300 text-left dark:border-gray-700">
+                                              <th className="p-1.5">#</th>
+                                              <th className="p-1.5">휴게 구간</th>
+                                              <th className="p-1.5">휴게시간</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {breakHistory.map((b, idx) => (
+                                              <tr
+                                                key={`${x.attendanceId}-break-${idx}`}
+                                                className="border-b border-gray-200 dark:border-gray-800"
+                                              >
+                                                <td className="p-1.5">{idx + 1}</td>
+                                                <td className="p-1.5">
+                                                  {formatBreakRange(
+                                                    b.breakStartAt,
+                                                    b.breakEndAt
+                                                  )}
+                                                </td>
+                                                <td className="p-1.5">
+                                                  {formatMinutes(
+                                                    b.breakMinutes ?? 0
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -836,6 +931,7 @@ function AttendanceReportPageInner() {
             workDate={selectedAttendance.workDate}
             initialCheckInAt={selectedAttendance.checkInAt}
             initialCheckOutAt={selectedAttendance.checkOutAt}
+            initialBreakHistory={selectedAttendance.breakHistory}
             onCreated={() => {
               setToast('정정 요청이 접수되었습니다.');
               setSelectedAttendance(null);

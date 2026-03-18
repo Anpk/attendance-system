@@ -1,6 +1,7 @@
 package io.github.anpk.attendanceapp.attendance.interfaces.dto;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public record AdminAttendanceReportItemResponse(
         Long attendanceId,
@@ -8,6 +9,7 @@ public record AdminAttendanceReportItemResponse(
         OffsetDateTime checkInAt,
         OffsetDateTime checkOutAt,
         long breakMinutes,
+        List<AttendanceBreakHistoryItemResponse> breakHistory,
         Long workMinutes,
         boolean isCorrected
 ) {}

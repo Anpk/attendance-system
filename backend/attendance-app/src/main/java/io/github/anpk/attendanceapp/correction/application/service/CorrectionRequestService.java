@@ -1,8 +1,11 @@
 package io.github.anpk.attendanceapp.correction.application.service;
 
 import io.github.anpk.attendanceapp.attendance.application.service.AttendanceService;
+import io.github.anpk.attendanceapp.attendance.domain.model.AttendanceBreak;
+import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceBreakRepository;
 import io.github.anpk.attendanceapp.attendance.infrastructure.repository.AttendanceRepository;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequest;
+import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestBreakProposal;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestStatus;
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestType;
 import io.github.anpk.attendanceapp.correction.infrastructure.repository.CorrectionRequestRepository;
@@ -18,6 +21,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +36,7 @@ public class CorrectionRequestService {
 
     private final AttendanceRepository attendanceRepository;
     private final CorrectionRequestRepository correctionRequestRepository;
+    private final AttendanceBreakRepository attendanceBreakRepository;
     private final EmployeeRepository employeeRepository;
     private final AttendanceService attendanceService;
     private final ManagerSiteAssignmentRepository managerSiteAssignmentRepository;
@@ -38,12 +44,14 @@ public class CorrectionRequestService {
     public CorrectionRequestService(
             AttendanceRepository attendanceRepository,
             CorrectionRequestRepository correctionRequestRepository,
+            AttendanceBreakRepository attendanceBreakRepository,
             EmployeeRepository employeeRepository,
             AttendanceService attendanceService,
             ManagerSiteAssignmentRepository managerSiteAssignmentRepository
     ) {
         this.attendanceRepository = attendanceRepository;
         this.correctionRequestRepository = correctionRequestRepository;
+        this.attendanceBreakRepository = attendanceBreakRepository;
         this.employeeRepository = employeeRepository;
         this.attendanceService = attendanceService;
         this.managerSiteAssignmentRepository = managerSiteAssignmentRepository;
@@ -80,6 +88,7 @@ public class CorrectionRequestService {
 
         OffsetDateTime proposedIn = normalizeKst(req.proposedCheckInAt());
         OffsetDateTime proposedOut = normalizeKst(req.proposedCheckOutAt());
+        List<BreakInterval> proposedBreaks = resolveProposedBreaks(req);
 
         enforceFieldsByType(type, proposedIn, proposedOut);
 
@@ -104,11 +113,31 @@ public class CorrectionRequestService {
             throw new BusinessException(ErrorCode.EXCEEDS_MAX_WORK_DURATION, "근무 시간은 24시간을 초과할 수 없습니다.");
         }
 
+        if (proposedBreaks != null) {
+            validateBreakIntervals(finalIn, finalOut, proposedBreaks);
+        }
+
         // 7) 저장
         OffsetDateTime requestedAt = OffsetDateTime.now(KST);
-        var saved = correctionRequestRepository.save(
-                CorrectionRequest.pending(attendance, userId, requestedAt, type, proposedIn, proposedOut, reason)
+        CorrectionRequest pending = CorrectionRequest.pending(
+                attendance,
+                userId,
+                requestedAt,
+                type,
+                proposedIn,
+                proposedOut,
+                proposedBreaks != null,
+                reason
         );
+
+        if (proposedBreaks != null) {
+            for (int i = 0; i < proposedBreaks.size(); i++) {
+                BreakInterval b = proposedBreaks.get(i);
+                pending.addProposedBreak(i, b.startAt(), b.endAt());
+            }
+        }
+
+        var saved = correctionRequestRepository.save(pending);
 
         return new CorrectionRequestResponse(
                 saved.getId(),
@@ -275,6 +304,16 @@ public class CorrectionRequestService {
      */
     private CorrectionRequestDetailResponse toDetailResponse(CorrectionRequest r) {
         var a = r.getAttendance();
+        String requestedByName = employeeRepository.findById(r.getRequestedBy())
+                .map(emp -> emp.getUsername())
+                .orElse(null);
+        String workerName = employeeRepository.findById(a.getUserId())
+                .map(emp -> emp.getUsername())
+                .orElse(null);
+        List<CorrectionRequestBreakProposalResponse> proposedBreaks = r.getProposedBreaks().stream()
+                .sorted(Comparator.comparing(CorrectionRequestBreakProposal::getSortOrder))
+                .map(this::toBreakProposalResponse)
+                .toList();
 
         // ✅ 제안 전(원본) 시간
         OffsetDateTime originalIn = toKst(a.getCheckInTime());
@@ -291,14 +330,32 @@ public class CorrectionRequestService {
                 r.getStatus(),
                 r.getType(),
                 r.getRequestedBy(),
+                requestedByName,
+                a.getUserId(),
+                workerName,
                 r.getRequestedAt(),
                 r.getProposedCheckInAt(),
                 r.getProposedCheckOutAt(),
+                r.isBreakChangeRequested(),
+                proposedBreaks,
                 r.getReason(),
                 originalIn,
                 originalOut,
                 currentIn,
                 currentOut
+        );
+    }
+
+    private CorrectionRequestBreakProposalResponse toBreakProposalResponse(CorrectionRequestBreakProposal b) {
+        long breakMinutes = Duration.between(
+                b.getProposedBreakStartAt().toInstant(),
+                b.getProposedBreakEndAt().toInstant()
+        ).toMinutes();
+        return new CorrectionRequestBreakProposalResponse(
+                b.getSortOrder(),
+                b.getProposedBreakStartAt(),
+                b.getProposedBreakEndAt(),
+                Math.max(0L, breakMinutes)
         );
     }
 
@@ -385,6 +442,7 @@ public class CorrectionRequestService {
         String comment = (body == null || body.comment() == null) ? null : body.comment().trim();
         var processedAt = OffsetDateTime.now(KST);
         req.approve(userId, processedAt, (comment == null || comment.isBlank()) ? null : comment);
+        applyApprovedBreakChanges(req);
 
         return new CorrectionRequestProcessResponse(
                 req.getId(),
@@ -394,6 +452,30 @@ public class CorrectionRequestService {
                 req.getApproveComment(),
                 null
         );
+    }
+
+    private void applyApprovedBreakChanges(CorrectionRequest req) {
+        if (req == null) return;
+        if (!req.isBreakChangeRequested()) return;
+
+        Long attendanceId = req.getAttendance().getId();
+        attendanceBreakRepository.deleteByAttendance_Id(attendanceId);
+
+        List<CorrectionRequestBreakProposal> proposals = req.getProposedBreaks();
+        if (proposals == null || proposals.isEmpty()) return;
+
+        List<AttendanceBreak> next = proposals.stream()
+                .sorted(Comparator.comparing(CorrectionRequestBreakProposal::getSortOrder))
+                .map(p -> {
+                    AttendanceBreak b = AttendanceBreak.start(
+                            req.getAttendance(),
+                            toKstLocalDateTime(p.getProposedBreakStartAt())
+                    );
+                    b.end(toKstLocalDateTime(p.getProposedBreakEndAt()));
+                    return b;
+                })
+                .toList();
+        attendanceBreakRepository.saveAll(next);
     }
 
     @Transactional
@@ -502,6 +584,53 @@ public class CorrectionRequestService {
         throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "type 또는 proposedCheckInAt/proposedCheckOutAt 중 하나는 필수입니다.");
     }
 
+    private List<BreakInterval> resolveProposedBreaks(CorrectionRequestCreateRequest req) {
+        if (req.proposedBreaks() == null) return null;
+
+        List<BreakInterval> out = new ArrayList<>();
+        for (CorrectionRequestBreakProposalRequest raw : req.proposedBreaks()) {
+            if (raw == null) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "휴게 정보 형식이 올바르지 않습니다.");
+            }
+            OffsetDateTime startAt = normalizeKst(raw.proposedBreakStartAt());
+            OffsetDateTime endAt = normalizeKst(raw.proposedBreakEndAt());
+            if (startAt == null || endAt == null) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "휴게 시작/종료 시간이 모두 필요합니다.");
+            }
+            if (!startAt.isBefore(endAt)) {
+                throw new BusinessException(ErrorCode.INVALID_TIME_ORDER, "휴게 시작 시간은 종료 시간보다 빨라야 합니다.");
+            }
+            out.add(new BreakInterval(startAt, endAt));
+        }
+        return out;
+    }
+
+    private void validateBreakIntervals(
+            OffsetDateTime finalIn,
+            OffsetDateTime finalOut,
+            List<BreakInterval> breaks
+    ) {
+        if (breaks == null) return;
+        if (finalIn == null || finalOut == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "휴게 검증을 위해 출근/퇴근 시간이 모두 필요합니다.");
+        }
+
+        List<BreakInterval> sorted = breaks.stream()
+                .sorted(Comparator.comparing(BreakInterval::startAt))
+                .toList();
+
+        BreakInterval prev = null;
+        for (BreakInterval b : sorted) {
+            if (b.startAt().isBefore(finalIn) || b.endAt().isAfter(finalOut)) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "휴게 시간은 출근~퇴근 구간 내여야 합니다.");
+            }
+            if (prev != null && b.startAt().isBefore(prev.endAt())) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "휴게 시간이 겹칠 수 없습니다.");
+            }
+            prev = b;
+        }
+    }
+
     private static void enforceFieldsByType(CorrectionRequestType type, OffsetDateTime proposedIn, OffsetDateTime proposedOut) {
         // 타입-필드 강제 (Contract 고정)
         if ((type == CorrectionRequestType.CHECK_IN || type == CorrectionRequestType.BOTH) && proposedIn == null) {
@@ -511,6 +640,11 @@ public class CorrectionRequestService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST_PAYLOAD, "proposedCheckOutAt이 필요합니다.");
         }
     }
+
+    private record BreakInterval(
+            OffsetDateTime startAt,
+            OffsetDateTime endAt
+    ) {}
 
     private static CorrectionRequestStatus parseStatus(String raw) {
         try {
@@ -528,5 +662,10 @@ public class CorrectionRequestService {
     private static OffsetDateTime toKst(LocalDateTime t) {
         if (t == null) return null;
         return t.atZone(KST).toOffsetDateTime();
+    }
+
+    private static LocalDateTime toKstLocalDateTime(OffsetDateTime t) {
+        if (t == null) return null;
+        return t.atZoneSameInstant(KST).toLocalDateTime();
     }
 }

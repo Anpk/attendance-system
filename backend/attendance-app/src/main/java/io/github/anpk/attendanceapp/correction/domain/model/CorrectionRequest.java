@@ -4,6 +4,8 @@ import io.github.anpk.attendanceapp.attendance.domain.model.Attendance;
 import jakarta.persistence.*;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 정정 요청 엔티티 (MVP 1차: 생성/내 요청 목록까지만 사용)
@@ -40,6 +42,13 @@ public class CorrectionRequest {
     @Column(name = "proposed_check_out_at")
     private OffsetDateTime proposedCheckOutAt;
 
+    @Column(name = "break_change_requested", nullable = false)
+    private boolean breakChangeRequested;
+
+    @OneToMany(mappedBy = "correctionRequest", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC")
+    private List<CorrectionRequestBreakProposal> proposedBreaks = new ArrayList<>();
+
     @Column(name = "canceled_at")
     private OffsetDateTime canceledAt;
 
@@ -67,6 +76,7 @@ public class CorrectionRequest {
             CorrectionRequestType type,
             OffsetDateTime proposedCheckInAt,
             OffsetDateTime proposedCheckOutAt,
+            boolean breakChangeRequested,
             String reason
     ) {
         CorrectionRequest r = new CorrectionRequest();
@@ -77,8 +87,15 @@ public class CorrectionRequest {
         r.type = type;
         r.proposedCheckInAt = proposedCheckInAt;
         r.proposedCheckOutAt = proposedCheckOutAt;
+        r.breakChangeRequested = breakChangeRequested;
         r.reason = reason;
         return r;
+    }
+
+    public void addProposedBreak(int sortOrder, OffsetDateTime startAt, OffsetDateTime endAt) {
+        this.proposedBreaks.add(
+                CorrectionRequestBreakProposal.of(this, sortOrder, startAt, endAt)
+        );
     }
 
     public Long getId() { return id; }
@@ -89,6 +106,8 @@ public class CorrectionRequest {
     public OffsetDateTime getRequestedAt() { return requestedAt; }
     public OffsetDateTime getProposedCheckInAt() { return proposedCheckInAt; }
     public OffsetDateTime getProposedCheckOutAt() { return proposedCheckOutAt; }
+    public boolean isBreakChangeRequested() { return breakChangeRequested; }
+    public List<CorrectionRequestBreakProposal> getProposedBreaks() { return proposedBreaks; }
     public OffsetDateTime getCanceledAt() { return canceledAt; }
     public OffsetDateTime getProcessedAt() { return processedAt; }
     public Long getProcessedBy() { return processedBy; }

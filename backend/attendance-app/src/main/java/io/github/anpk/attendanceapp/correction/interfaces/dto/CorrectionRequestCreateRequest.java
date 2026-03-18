@@ -4,6 +4,7 @@ import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestSta
 import io.github.anpk.attendanceapp.correction.domain.model.CorrectionRequestType;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /**
  * 정정 요청 생성 요청 DTO
@@ -18,5 +19,6 @@ public record CorrectionRequestCreateRequest(
         OffsetDateTime requestedAt,
         OffsetDateTime proposedCheckInAt,
         OffsetDateTime proposedCheckOutAt,
+        List<CorrectionRequestBreakProposalRequest> proposedBreaks,
         String reason
 ) {}
