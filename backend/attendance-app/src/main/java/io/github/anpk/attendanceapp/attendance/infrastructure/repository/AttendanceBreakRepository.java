@@ -13,4 +13,6 @@ public interface AttendanceBreakRepository extends JpaRepository<AttendanceBreak
     Optional<AttendanceBreak> findFirstByAttendance_IdAndBreakEndTimeIsNullOrderByBreakStartTimeDesc(Long attendanceId);
 
     List<AttendanceBreak> findAllByAttendance_IdIn(List<Long> attendanceIds);
+
+    void deleteByAttendance_Id(Long attendanceId);
 }

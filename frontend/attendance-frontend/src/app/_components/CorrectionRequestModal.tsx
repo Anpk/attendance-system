@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
-import { ApiError } from '@/lib/api/types';
+import { ApiError, type AttendanceBreakHistoryItemResponse } from '@/lib/api/types';
 
-type CorrectionType = 'CHECK_IN' | 'CHECK_OUT' | 'BOTH';
+type EditableBreakRow = {
+  id: number;
+  start: string;
+  end: string;
+};
 
 type Props = {
   open: boolean;
@@ -19,6 +23,7 @@ type Props = {
   workDate: string;
   initialCheckInAt: string | null;
   initialCheckOutAt: string | null;
+  initialBreakHistory?: AttendanceBreakHistoryItemResponse[];
   onCreated: () => void;
 };
 
@@ -26,18 +31,26 @@ function isoToLocalTime(iso: string | null) {
   if (!iso) return '';
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
-  // time: HH:mm
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function toKstOffsetISOStringFromDateAndTime(workDate: string, time: string) {
-  // workDate: "YYYY-MM-DD"
-  // time: "HH:mm"
-  // 서버가 +09:00 offset 포함 ISO를 기대하므로, KST 기준 문자열로 조립한다.
   if (!workDate || !time) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate)) return null;
   if (!/^\d{2}:\d{2}$/.test(time)) return null;
   return `${workDate}T${time}:00.000+09:00`;
+}
+
+function timeToMinutes(t: string) {
+  const [hh, mm] = t.split(':');
+  const h = Number(hh);
+  const m = Number(mm);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+  return h * 60 + m;
+}
+
+function formatHm(iso: string | null) {
+  return isoToLocalTime(iso) || '--:--';
 }
 
 export default function CorrectionRequestModal({
@@ -50,103 +63,125 @@ export default function CorrectionRequestModal({
   workDate,
   initialCheckInAt,
   initialCheckOutAt,
+  initialBreakHistory,
   onCreated,
 }: Props) {
-  const [type, setType] = useState<CorrectionType>('BOTH');
   const [checkInLocal, setCheckInLocal] = useState('');
   const [checkOutLocal, setCheckOutLocal] = useState('');
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<'info' | 'error'>('info');
+  const [isBreakEditOpen, setIsBreakEditOpen] = useState(false);
+  const [breakRows, setBreakRows] = useState<EditableBreakRow[]>([]);
+  const breakRowSeqRef = useRef(1);
 
-  // 모달 열릴 때 초기값 세팅
   useEffect(() => {
     if (!open) return;
-    setType('BOTH');
+
     setCheckInLocal(isoToLocalTime(initialCheckInAt));
     setCheckOutLocal(isoToLocalTime(initialCheckOutAt));
     setReason('');
     setMessage('');
     setMessageTone('info');
     setLoading(false);
-  }, [open, initialCheckInAt, initialCheckOutAt]);
+    setIsBreakEditOpen(false);
 
-  function timeToMinutes(t: string) {
-    // "HH:mm" -> minutes
-    const [hh, mm] = t.split(':');
-    const h = Number(hh);
-    const m = Number(mm);
-    if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
-    return h * 60 + m;
-  }
+    const nextRows = (initialBreakHistory ?? []).map((b, idx) => ({
+      id: idx + 1,
+      start: isoToLocalTime(b.breakStartAt),
+      end: isoToLocalTime(b.breakEndAt),
+    }));
+    breakRowSeqRef.current = nextRows.length + 1;
+    setBreakRows(nextRows);
+  }, [open, initialCheckInAt, initialCheckOutAt, initialBreakHistory]);
 
   const isTimeOrderValid = useMemo(() => {
-    // 1차 가드: 가능한 정보가 있을 때만 "출근 ≤ 퇴근" 검증
-    // - BOTH: 입력 출근/퇴근으로 검증
-    // - CHECK_IN: 입력 출근 + 기존 퇴근(있으면)으로 검증
-    // - CHECK_OUT: 기존 출근(있으면) + 입력 퇴근으로 검증
-
-    const existingIn = initialCheckInAt ? isoToLocalTime(initialCheckInAt) : '';
-    const existingOut = initialCheckOutAt
-      ? isoToLocalTime(initialCheckOutAt)
-      : '';
-
-    let effectiveIn = '';
-    let effectiveOut = '';
-
-    if (type === 'BOTH') {
-      if (!checkInLocal || !checkOutLocal) return true;
-      effectiveIn = checkInLocal;
-      effectiveOut = checkOutLocal;
-    } else if (type === 'CHECK_IN') {
-      if (!checkInLocal) return true;
-      // 기존 퇴근이 없으면(= 아직 퇴근 전) 순서 검증 불가 → 통과
-      if (!existingOut) return true;
-      effectiveIn = checkInLocal;
-      effectiveOut = existingOut;
-    } else {
-      // CHECK_OUT
-      if (!checkOutLocal) return true;
-      // 기존 출근이 없으면(= 출근 기록 없음) 순서 검증 불가 → 통과(서버가 업무 규칙으로 막을 수 있음)
-      if (!existingIn) return true;
-      effectiveIn = existingIn;
-      effectiveOut = checkOutLocal;
-    }
-
-    const inMin = timeToMinutes(effectiveIn);
-    const outMin = timeToMinutes(effectiveOut);
+    if (!checkInLocal || !checkOutLocal) return true;
+    const inMin = timeToMinutes(checkInLocal);
+    const outMin = timeToMinutes(checkOutLocal);
     if (Number.isNaN(inMin) || Number.isNaN(outMin)) return true;
     return inMin <= outMin;
-  }, [type, checkInLocal, checkOutLocal, initialCheckInAt, initialCheckOutAt]);
+  }, [checkInLocal, checkOutLocal]);
+
+  const breakValidationMessage = useMemo(() => {
+    if (!isBreakEditOpen) return '';
+    for (const row of breakRows) {
+      if (!row.start || !row.end) {
+        return '휴게 시작/종료 시간을 모두 입력해 주세요.';
+      }
+      const startMin = timeToMinutes(row.start);
+      const endMin = timeToMinutes(row.end);
+      if (Number.isNaN(startMin) || Number.isNaN(endMin)) {
+        return '휴게 시간 형식이 올바르지 않습니다.';
+      }
+      if (startMin >= endMin) {
+        return '휴게 시작 시간은 종료 시간보다 빨라야 합니다.';
+      }
+    }
+
+    const sorted = [...breakRows].sort((a, b) => {
+      return timeToMinutes(a.start) - timeToMinutes(b.start);
+    });
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const cur = sorted[i];
+      if (timeToMinutes(cur.start) < timeToMinutes(prev.end)) {
+        return '휴게 시간이 겹칠 수 없습니다.';
+      }
+    }
+
+    if (!checkInLocal || !checkOutLocal) {
+      return '휴게 수정 시 제안 출근/퇴근 시간을 먼저 입력해 주세요.';
+    }
+    const workStart = timeToMinutes(checkInLocal);
+    const workEnd = timeToMinutes(checkOutLocal);
+    if (Number.isNaN(workStart) || Number.isNaN(workEnd) || workStart > workEnd) {
+      return '휴게 수정 전에 제안 출근/퇴근 시간을 확인해 주세요.';
+    }
+
+    for (const row of breakRows) {
+      const startMin = timeToMinutes(row.start);
+      const endMin = timeToMinutes(row.end);
+      if (startMin < workStart || endMin > workEnd) {
+        return '휴게 시간은 제안 출근~퇴근 구간 내여야 합니다.';
+      }
+    }
+
+    return '';
+  }, [isBreakEditOpen, breakRows, checkInLocal, checkOutLocal]);
 
   const canSubmit = useMemo(() => {
     if (!reason.trim()) return false;
-    if (type === 'CHECK_IN') return !!checkInLocal;
-    if (type === 'CHECK_OUT') return !!checkOutLocal;
     if (!checkInLocal || !checkOutLocal) return false;
-    // BOTH일 때 출근<=퇴근 1차 가드
-    return isTimeOrderValid;
-  }, [type, checkInLocal, checkOutLocal, reason, isTimeOrderValid]);
+    if (!isTimeOrderValid) return false;
+    if (breakValidationMessage) return false;
+    return true;
+  }, [
+    reason,
+    checkInLocal,
+    checkOutLocal,
+    isTimeOrderValid,
+    breakValidationMessage,
+  ]);
 
   const missingHint = useMemo(() => {
-    // 입력이 부족할 때 사용자가 왜 버튼이 비활성인지 바로 이해할 수 있도록 힌트 제공
     if (!reason.trim()) return '사유를 입력해 주세요.';
-    if (type === 'CHECK_IN' && !checkInLocal)
-      return '제안 출근 시간을 선택해 주세요.';
-    if (type === 'CHECK_OUT' && !checkOutLocal)
-      return '제안 퇴근 시간을 선택해 주세요.';
-    if (type === 'BOTH' && (!checkInLocal || !checkOutLocal)) {
+    if (!checkInLocal || !checkOutLocal) {
       return '제안 출근/퇴근 시간을 모두 선택해 주세요.';
     }
-    if (type === 'BOTH' && !isTimeOrderValid) {
+    if (!isTimeOrderValid) {
       return '출근 시간은 퇴근 시간보다 늦을 수 없습니다.';
     }
-    if ((type === 'CHECK_IN' || type === 'CHECK_OUT') && !isTimeOrderValid) {
-      return '출근 시간은 퇴근 시간보다 늦을 수 없습니다.';
-    }
+    if (breakValidationMessage) return breakValidationMessage;
     return '';
-  }, [type, checkInLocal, checkOutLocal, reason, isTimeOrderValid]);
+  }, [
+    reason,
+    checkInLocal,
+    checkOutLocal,
+    isTimeOrderValid,
+    breakValidationMessage,
+  ]);
 
   const targetLabel = useMemo(() => {
     const idText =
@@ -162,34 +197,42 @@ export default function CorrectionRequestModal({
   const submit = async () => {
     if (!canSubmit || loading) return;
 
-    const proposedCheckInAt =
-      type === 'CHECK_IN' || type === 'BOTH'
-        ? toKstOffsetISOStringFromDateAndTime(workDate, checkInLocal)
-        : null;
-    const proposedCheckOutAt =
-      type === 'CHECK_OUT' || type === 'BOTH'
-        ? toKstOffsetISOStringFromDateAndTime(workDate, checkOutLocal)
-        : null;
+    const proposedCheckInAt = toKstOffsetISOStringFromDateAndTime(
+      workDate,
+      checkInLocal
+    );
+    const proposedCheckOutAt = toKstOffsetISOStringFromDateAndTime(
+      workDate,
+      checkOutLocal
+    );
+
+    const proposedBreaks = isBreakEditOpen
+      ? breakRows.map((row) => ({
+          proposedBreakStartAt: toKstOffsetISOStringFromDateAndTime(
+            workDate,
+            row.start
+          ),
+          proposedBreakEndAt: toKstOffsetISOStringFromDateAndTime(
+            workDate,
+            row.end
+          ),
+        }))
+      : undefined;
 
     setLoading(true);
     setMessage('');
     setMessageTone('info');
     try {
-      await apiFetch(
-        `${baseUrl}/api/attendance/${attendanceId}/correction-requests`,
-        {
-          method: 'POST',
-          // apiFetch가 JSON stringify + content-type 처리
-          body: {
-            type,
-            proposedCheckInAt,
-            proposedCheckOutAt,
-            reason: reason.trim(),
-          },
-        }
-      );
+      await apiFetch(`${baseUrl}/api/attendance/${attendanceId}/correction-requests`, {
+        method: 'POST',
+        body: {
+          proposedCheckInAt,
+          proposedCheckOutAt,
+          proposedBreaks,
+          reason: reason.trim(),
+        },
+      });
 
-      // 생성 성공 → 모달 닫고 목록 재조회
       onClose();
       onCreated();
     } catch (e) {
@@ -197,7 +240,6 @@ export default function CorrectionRequestModal({
       setMessage(msg);
       setMessageTone('error');
 
-      // ✅ 중복 신청은 운영에서 제일 많이 보는 케이스라 더 명확히
       if (e instanceof ApiError && e.code === 'PENDING_REQUEST_EXISTS') {
         const targetHint = targetLabel ? `대상 ${targetLabel} · ` : '';
         setMessage(
@@ -216,7 +258,7 @@ export default function CorrectionRequestModal({
       aria-modal="true"
       aria-busy={loading}
     >
-      <div className="w-full max-w-md rounded-lg bg-white p-4 shadow text-gray-900 dark:bg-gray-800 dark:text-gray-100">
+      <div className="w-full max-w-xl rounded-lg bg-white p-4 shadow text-gray-900 dark:bg-gray-800 dark:text-gray-100">
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">정정 요청</h2>
@@ -236,57 +278,151 @@ export default function CorrectionRequestModal({
           </button>
         </div>
 
+        <section className="mb-3 rounded border border-gray-300 bg-gray-50 p-3 text-xs dark:border-gray-700 dark:bg-gray-900">
+          <div className="font-medium">현재 출/퇴근 및 휴게 이력</div>
+          <div className="mt-2 grid gap-1">
+            <div>현재 출근: {formatHm(initialCheckInAt)}</div>
+            <div>현재 퇴근: {formatHm(initialCheckOutAt)}</div>
+          </div>
+          <div className="mt-2">
+            {(initialBreakHistory ?? []).length === 0 ? (
+              <div className="text-gray-500 dark:text-gray-300">
+                휴게 이력이 없습니다.
+              </div>
+            ) : (
+              <div className="overflow-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-300 text-left dark:border-gray-700">
+                      <th className="p-1.5">#</th>
+                      <th className="p-1.5">휴게 구간</th>
+                      <th className="p-1.5">휴게시간</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(initialBreakHistory ?? []).map((b, idx) => (
+                      <tr
+                        key={`current-break-${idx}`}
+                        className="border-b border-gray-200 dark:border-gray-800"
+                      >
+                        <td className="p-1.5">{idx + 1}</td>
+                        <td className="p-1.5">
+                          {formatHm(b.breakStartAt)} ~ {formatHm(b.breakEndAt)}
+                        </td>
+                        <td className="p-1.5">{b.breakMinutes}분</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+
         <div className="mb-3">
-          <label className="mb-1 block text-sm font-medium">정정 유형</label>
-          <select
+          <label className="mb-1 block text-sm font-medium">제안 출근 시간</label>
+          <input
+            type="time"
             className="w-full rounded border px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-            value={type}
-            onChange={(e) => setType(e.target.value as CorrectionType)}
+            value={checkInLocal}
+            onChange={(e) => setCheckInLocal(e.target.value)}
             disabled={loading}
-          >
-            <option value="BOTH">출근/퇴근 모두</option>
-            <option value="CHECK_IN">출근만</option>
-            <option value="CHECK_OUT">퇴근만</option>
-          </select>
+          />
         </div>
 
-        {(type === 'CHECK_IN' || type === 'BOTH') && (
-          <div className="mb-3">
-            <label className="mb-1 block text-sm font-medium">
-              제안 출근 시간
-            </label>
-            <input
-              type="time"
-              className="w-full rounded border px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-              value={checkInLocal}
-              onChange={(e) => setCheckInLocal(e.target.value)}
-              disabled={loading}
-            />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">
-              현재 출근:{' '}
-              {initialCheckInAt ? isoToLocalTime(initialCheckInAt) : '--:--'}
-            </p>
-          </div>
-        )}
+        <div className="mb-3">
+          <label className="mb-1 block text-sm font-medium">제안 퇴근 시간</label>
+          <input
+            type="time"
+            className="w-full rounded border px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            value={checkOutLocal}
+            onChange={(e) => setCheckOutLocal(e.target.value)}
+            disabled={loading}
+          />
+        </div>
 
-        {(type === 'CHECK_OUT' || type === 'BOTH') && (
-          <div className="mb-3">
-            <label className="mb-1 block text-sm font-medium">
-              제안 퇴근 시간
-            </label>
-            <input
-              type="time"
-              className="w-full rounded border px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-              value={checkOutLocal}
-              onChange={(e) => setCheckOutLocal(e.target.value)}
-              disabled={loading}
-            />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">
-              현재 퇴근:{' '}
-              {initialCheckOutAt ? isoToLocalTime(initialCheckOutAt) : '--:--'}
-            </p>
-          </div>
-        )}
+        <div className="mb-3">
+          <button
+            type="button"
+            className="rounded border border-gray-400 px-2 py-1 text-xs hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-700"
+            disabled={loading}
+            onClick={() => setIsBreakEditOpen((v) => !v)}
+          >
+            {isBreakEditOpen ? '휴게정보 수정 접기' : '휴게정보 수정'}
+          </button>
+
+          {isBreakEditOpen && (
+            <div className="mt-2 rounded border border-gray-300 p-3 dark:border-gray-700">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-xs font-medium">제안 휴게 이력</div>
+                <button
+                  type="button"
+                  className="rounded border border-gray-400 px-2 py-1 text-[11px] hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                  disabled={loading}
+                  onClick={() => {
+                    const nextId = breakRowSeqRef.current++;
+                    setBreakRows((prev) => [
+                      ...prev,
+                      { id: nextId, start: '', end: '' },
+                    ]);
+                  }}
+                >
+                  휴게 추가
+                </button>
+              </div>
+
+              {breakRows.length === 0 ? (
+                <div className="text-xs text-gray-500 dark:text-gray-300">
+                  등록된 휴게 이력이 없습니다. 필요하면 휴게 추가 버튼으로 입력해 주세요.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {breakRows.map((row, idx) => (
+                    <div key={row.id} className="grid grid-cols-[24px_1fr_1fr_auto] items-center gap-2">
+                      <span className="text-xs text-gray-500">{idx + 1}</span>
+                      <input
+                        type="time"
+                        value={row.start}
+                        onChange={(e) =>
+                          setBreakRows((prev) =>
+                            prev.map((x) =>
+                              x.id === row.id ? { ...x, start: e.target.value } : x
+                            )
+                          )
+                        }
+                        disabled={loading}
+                        className="rounded border px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-900"
+                      />
+                      <input
+                        type="time"
+                        value={row.end}
+                        onChange={(e) =>
+                          setBreakRows((prev) =>
+                            prev.map((x) =>
+                              x.id === row.id ? { ...x, end: e.target.value } : x
+                            )
+                          )
+                        }
+                        disabled={loading}
+                        className="rounded border px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-900"
+                      />
+                      <button
+                        type="button"
+                        className="rounded border border-gray-400 px-2 py-1 text-[11px] hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-700"
+                        disabled={loading}
+                        onClick={() =>
+                          setBreakRows((prev) => prev.filter((x) => x.id !== row.id))
+                        }
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="mb-3">
           <label className="mb-1 block text-sm font-medium">사유</label>
@@ -299,9 +435,7 @@ export default function CorrectionRequestModal({
             placeholder="정정 사유를 입력하세요"
           />
           {!loading && missingHint && (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">
-              {missingHint}
-            </p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-300">{missingHint}</p>
           )}
         </div>
 
@@ -317,7 +451,7 @@ export default function CorrectionRequestModal({
           </p>
         ) : null}
 
-        <div className="flex gap-2">
+        <div className="mt-3 flex gap-2">
           <button
             type="button"
             className="flex-1 rounded bg-gray-100 px-3 py-2 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"

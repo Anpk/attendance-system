@@ -91,8 +91,15 @@ export type AttendanceReportItemResponse = {
   checkInAt: string | null;
   checkOutAt: string | null;
   breakMinutes?: number;
+  breakHistory?: AttendanceBreakHistoryItemResponse[];
   workMinutes: number | null;
   isCorrected: boolean;
+};
+
+export type AttendanceBreakHistoryItemResponse = {
+  breakStartAt: string | null; // ISO with +09:00
+  breakEndAt: string | null; // ISO with +09:00
+  breakMinutes: number;
 };
 
 export type AttendanceReportResponse = {
@@ -158,6 +165,7 @@ export type AdminAttendanceReportItemResponse = {
   checkInAt: string | null;
   checkOutAt: string | null;
   breakMinutes?: number;
+  breakHistory?: AttendanceBreakHistoryItemResponse[];
   workMinutes: number | null;
   isCorrected: boolean;
 };

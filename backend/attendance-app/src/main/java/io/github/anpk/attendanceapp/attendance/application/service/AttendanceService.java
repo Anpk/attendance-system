@@ -321,12 +321,16 @@ public class AttendanceService {
         List<Attendance> items = attendanceRepository
                 .findAllByUserIdAndWorkDateBetweenOrderByWorkDateAsc(userId, fromDate, toDate);
         Map<Long, Long> breakMinutesByAttendanceId = loadBreakMinutesByAttendanceIds(items);
+        Map<Long, List<AttendanceBreakHistoryItemResponse>> breakHistoryByAttendanceId =
+                loadBreakHistoryByAttendanceIds(items);
 
         long totalWorkMinutes = 0L;
         List<AttendanceReportItemResponse> mapped = items.stream()
                 .map(a -> {
                     FinalSnapshot snap = toFinalSnapshot(a);
                     long breakMinutes = breakMinutesByAttendanceId.getOrDefault(a.getId(), 0L);
+                    List<AttendanceBreakHistoryItemResponse> breakHistory =
+                            breakHistoryByAttendanceId.getOrDefault(a.getId(), List.of());
 
                     Long workMinutes = null;
                     if (snap.finalCheckInAt() != null && snap.finalCheckOutAt() != null) {
@@ -343,6 +347,7 @@ public class AttendanceService {
                             snap.finalCheckInAt(),
                             snap.finalCheckOutAt(),
                             breakMinutes,
+                            breakHistory,
                             workMinutes,
                             snap.isCorrected()
                     );
@@ -417,10 +422,14 @@ public class AttendanceService {
             var attendances = attendanceRepository
                     .findAllByUserIdAndWorkDateBetweenOrderByWorkDateAsc(emp.getUserId(), fromDate, toDate);
             Map<Long, Long> breakMinutesByAttendanceId = loadBreakMinutesByAttendanceIds(attendances);
+            Map<Long, List<AttendanceBreakHistoryItemResponse>> breakHistoryByAttendanceId =
+                    loadBreakHistoryByAttendanceIds(attendances);
 
             var items = attendances.stream().map(a -> {
                 FinalSnapshot snap = toFinalSnapshot(a);
                 long breakMinutes = breakMinutesByAttendanceId.getOrDefault(a.getId(), 0L);
+                List<AttendanceBreakHistoryItemResponse> breakHistory =
+                        breakHistoryByAttendanceId.getOrDefault(a.getId(), List.of());
 
                 Long workMinutes = null;
                 if (snap.finalCheckInAt() != null && snap.finalCheckOutAt() != null) {
@@ -436,6 +445,7 @@ public class AttendanceService {
                         snap.finalCheckInAt(),
                         snap.finalCheckOutAt(),
                         breakMinutes,
+                        breakHistory,
                         workMinutes,
                         snap.isCorrected()
                 );
@@ -526,6 +536,38 @@ public class AttendanceService {
                         b -> b.getAttendance().getId(),
                         Collectors.summingLong(AttendanceBreak::durationMinutesOrZero)
                 ));
+    }
+
+    private Map<Long, List<AttendanceBreakHistoryItemResponse>> loadBreakHistoryByAttendanceIds(
+            List<Attendance> attendances
+    ) {
+        if (attendances == null || attendances.isEmpty()) return Map.of();
+
+        List<Long> attendanceIds = attendances.stream().map(Attendance::getId).toList();
+        if (attendanceIds.isEmpty()) return Map.of();
+
+        return attendanceBreakRepository.findAllByAttendance_IdIn(attendanceIds).stream()
+                .collect(Collectors.groupingBy(
+                        b -> b.getAttendance().getId(),
+                        Collectors.collectingAndThen(Collectors.toList(), list -> list.stream()
+                                .sorted(java.util.Comparator.comparing(AttendanceBreak::getBreakStartTime))
+                                .map(this::toBreakHistoryItem)
+                                .toList())
+                ));
+    }
+
+    private AttendanceBreakHistoryItemResponse toBreakHistoryItem(AttendanceBreak b) {
+        OffsetDateTime start = b.getBreakStartTime() == null
+                ? null
+                : b.getBreakStartTime().atZone(KST).toOffsetDateTime();
+        OffsetDateTime end = b.getBreakEndTime() == null
+                ? null
+                : b.getBreakEndTime().atZone(KST).toOffsetDateTime();
+        return new AttendanceBreakHistoryItemResponse(
+                start,
+                end,
+                b.durationMinutesOrZero()
+        );
     }
 
     private AttendanceActionResponse toAttendanceActionResponse(Attendance attendance, boolean applyFinalSnapshot) {

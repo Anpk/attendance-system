@@ -15,12 +15,25 @@ import AppHeader from '@/app/_components/AppHeader';
 import { apiFetch } from '@/lib/api/client';
 import { toUserMessage } from '@/lib/api/error-messages';
 
+type CorrectionRequestBreakProposal = {
+  sortOrder?: number | null;
+  proposedBreakStartAt: string; // ISO
+  proposedBreakEndAt: string; // ISO
+  breakMinutes?: number | null;
+};
+
 type CorrectionRequestDetail = {
   requestId: number;
   attendanceId: number;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED';
   type: 'CHECK_IN' | 'CHECK_OUT' | 'BOTH';
+  requestedBy?: number;
+  requestedByName?: string | null;
+  workerUserId?: number | null;
+  workerName?: string | null;
   requestedAt: string; // ISO
+  breakChangeRequested?: boolean;
+  proposedBreaks?: CorrectionRequestBreakProposal[];
   // 아래 필드들은 "목록 응답"에 포함되지 않을 수 있어 optional로 둔다(최소 diff)
   proposedCheckInAt?: string | null; // ISO
   proposedCheckOutAt?: string | null; // ISO
@@ -127,6 +140,22 @@ function fmtYmdHm(iso?: string | null): string {
   }
 }
 
+function computeBreakMinutes(
+  startIso?: string | null,
+  endIso?: string | null
+): number | null {
+  if (!startIso || !endIso) return null;
+  try {
+    const start = new Date(startIso).getTime();
+    const end = new Date(endIso).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    const minutes = Math.floor((end - start) / 60000);
+    return minutes >= 0 ? minutes : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeProposedTimes(
   d: CorrectionRequestDetail
 ): CorrectionRequestDetail {
@@ -189,6 +218,50 @@ function getIsoField(
   return null;
 }
 
+function getStringField(
+  obj: Record<string, unknown>,
+  keys: string[]
+): string | null {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'string' && v.trim().length > 0) return v;
+  }
+  return null;
+}
+
+function getNumberField(
+  obj: Record<string, unknown>,
+  keys: string[]
+): number | null {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+function getBooleanField(
+  obj: Record<string, unknown>,
+  keys: string[]
+): boolean | null {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'boolean') return v;
+  }
+  return null;
+}
+
+function getArrayField(
+  obj: Record<string, unknown>,
+  keys: string[]
+): unknown[] | null {
+  for (const k of keys) {
+    const v = obj[k];
+    if (Array.isArray(v)) return v;
+  }
+  return null;
+}
+
 function getNestedObj(
   obj: Record<string, unknown>,
   key: string
@@ -208,8 +281,41 @@ function getIsoFieldFromNested(
   return getIsoField(nested, keys);
 }
 
+function parseProposedBreaks(
+  value: unknown[] | null
+): CorrectionRequestBreakProposal[] | null {
+  if (!value) return null;
+  const parsed: CorrectionRequestBreakProposal[] = [];
+  for (const item of value) {
+    const row = asRecord(item);
+    if (!row) continue;
+    const startAt = getIsoField(row, [
+      'proposedBreakStartAt',
+      'proposed_break_start_at',
+      'breakStartAt',
+      'startAt',
+    ]);
+    const endAt = getIsoField(row, [
+      'proposedBreakEndAt',
+      'proposed_break_end_at',
+      'breakEndAt',
+      'endAt',
+    ]);
+    if (!startAt || !endAt) continue;
+
+    parsed.push({
+      sortOrder: getNumberField(row, ['sortOrder', 'sort_order']),
+      proposedBreakStartAt: startAt,
+      proposedBreakEndAt: endAt,
+      breakMinutes: getNumberField(row, ['breakMinutes', 'break_minutes']),
+    });
+  }
+  return parsed;
+}
+
 function applyCompatLayer(d: CorrectionRequestDetail): CorrectionRequestDetail {
   const obj = d as unknown as Record<string, unknown>;
+  const attendanceObj = getNestedObj(obj, 'attendance');
 
   // ✅ 제안(요청) 시간: 필드명 호환
   const proposedIn =
@@ -302,8 +408,41 @@ function applyCompatLayer(d: CorrectionRequestDetail): CorrectionRequestDetail {
       'originCheckOutAt',
     ]);
 
+  const requestedByName =
+    d.requestedByName ??
+    getStringField(obj, ['requestedByName', 'requested_by_name', 'requesterName']);
+  const requestedBy =
+    d.requestedBy ?? getNumberField(obj, ['requestedBy', 'requested_by']);
+
+  const workerUserId =
+    d.workerUserId ??
+    getNumberField(obj, ['workerUserId', 'worker_user_id', 'targetUserId']) ??
+    (attendanceObj ? getNumberField(attendanceObj, ['userId', 'user_id']) : null);
+
+  const workerName =
+    d.workerName ??
+    getStringField(obj, ['workerName', 'worker_name', 'targetUserName']) ??
+    (attendanceObj
+      ? getStringField(attendanceObj, ['username', 'name', 'userName'])
+      : null);
+
+  const proposedBreaks =
+    d.proposedBreaks ??
+    parseProposedBreaks(getArrayField(obj, ['proposedBreaks', 'proposed_breaks']));
+
+  const breakChangeRequested =
+    d.breakChangeRequested ??
+    getBooleanField(obj, ['breakChangeRequested', 'break_change_requested']) ??
+    (proposedBreaks ? true : undefined);
+
   return {
     ...d,
+    requestedBy,
+    requestedByName: requestedByName ?? undefined,
+    workerUserId: workerUserId ?? undefined,
+    workerName: workerName ?? undefined,
+    breakChangeRequested,
+    proposedBreaks: proposedBreaks ?? undefined,
     proposedCheckInAt: proposedIn ?? undefined,
     proposedCheckOutAt: proposedOut ?? undefined,
     currentCheckInAt: currentIn ?? undefined,
@@ -580,7 +719,18 @@ function CorrectionDetailPageInner() {
               </div>
 
               <div className="text-gray-700 dark:text-gray-200">
-                <div>근태 ID: {data.attendanceId}</div>
+                <div>
+                  정정 요청자:{' '}
+                  {data.requestedByName?.trim() ||
+                    (typeof data.requestedBy === 'number'
+                      ? `사용자 #${data.requestedBy}`
+                      : '-')}
+                </div>
+                <div>
+                  근무자:{' '}
+                  {data.workerName?.trim() ||
+                    (data.workerUserId ? `사용자 #${data.workerUserId}` : '-')}
+                </div>
                 <div>유형: {typeLabel(data.type)}</div>
 
                 {/* ✅ 원본(현재) vs 제안 비교 */}
@@ -607,6 +757,10 @@ function CorrectionDetailPageInner() {
                   const outChanged = !!(
                     propOutHm && (baseOutHm ? propOutHm !== baseOutHm : true)
                   );
+                  const hasBreakProposal =
+                    data.breakChangeRequested ||
+                    (data.proposedBreaks?.length ?? 0) > 0;
+                  const proposedBreaks = data.proposedBreaks ?? [];
 
                   return (
                     <div className="mt-2">
@@ -641,6 +795,38 @@ function CorrectionDetailPageInner() {
                                 <span className="font-medium text-gray-700 dark:text-gray-200">
                                   변경 없음
                                 </span>
+                              )}
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <span className="w-10 pt-0.5">휴게</span>
+                              {!hasBreakProposal ? (
+                                <span className="font-medium text-gray-700 dark:text-gray-200">
+                                  변경 없음
+                                </span>
+                              ) : proposedBreaks.length === 0 ? (
+                                <span className="font-medium text-red-700 dark:text-red-300">
+                                  휴게 이력 제거 제안
+                                </span>
+                              ) : (
+                                <div className="space-y-1 font-medium text-red-700 dark:text-red-300">
+                                  {proposedBreaks.map((b, idx) => {
+                                    const minutes =
+                                      b.breakMinutes ??
+                                      computeBreakMinutes(
+                                        b.proposedBreakStartAt,
+                                        b.proposedBreakEndAt
+                                      );
+                                    return (
+                                      <div key={`break-proposal-${idx}`}>
+                                        {fmtHm(b.proposedBreakStartAt)} ~{' '}
+                                        {fmtHm(b.proposedBreakEndAt)}
+                                        {typeof minutes === 'number'
+                                          ? ` (${minutes}분)`
+                                          : ''}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               )}
                             </div>
                           </div>
